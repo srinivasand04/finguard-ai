@@ -6,9 +6,12 @@
     python -m app.cli eda
     python -m app.cli train
     python -m app.cli score
+    python -m app.cli graph        # Phase 2: graph intelligence
     python -m app.cli risk
     python -m app.cli alerts
-    python -m app.cli all          # init-db --drop, generate, ingest, eda, train, score, risk, alerts
+    python -m app.cli rag-build    # Phase 2: compliance corpus -> chunks -> embeddings -> Qdrant
+    python -m app.cli rag-eval     # Phase 2: retrieval + answer evaluation
+    python -m app.cli all          # init-db --drop, generate, ingest, eda, train, score, graph, risk, alerts, rag-build
 """
 from __future__ import annotations
 
@@ -35,11 +38,11 @@ def main() -> None:
     d = sub.add_parser("init-db"); d.add_argument("--drop", action="store_true")
     g = sub.add_parser("generate"); g.add_argument("--customers", type=int, default=1500); g.add_argument("--days", type=int, default=180)
     i = sub.add_parser("ingest"); i.add_argument("--source", default=str(s.data_dir / "raw" / "amlsim"))
-    for name in ["eda", "train", "score", "risk", "alerts", "all"]:
+    for name in ["eda", "train", "score", "graph", "risk", "alerts", "rag-build", "rag-eval", "all"]:
         sub.add_parser(name)
     a = p.parse_args()
     engine = get_engine()
-    steps = ["init-db", "generate", "ingest", "eda", "train", "score", "risk", "alerts"] if a.cmd == "all" else [a.cmd]
+    steps = ["init-db", "generate", "ingest", "eda", "train", "score", "graph", "risk", "alerts", "rag-build"] if a.cmd == "all" else [a.cmd]
     source = Path(getattr(a, "source", s.data_dir / "raw" / "amlsim"))
 
     for step in steps:
@@ -63,6 +66,15 @@ def main() -> None:
         elif step == "score":
             from ml.scoring import score_all
             _print("score", score_all(engine), t0)
+        elif step == "graph":
+            from graph.pipeline import run_graph_analysis
+            _print("graph", run_graph_analysis(engine), t0)
+        elif step == "rag-build":
+            from rag.pipeline import build_index
+            _print("rag-build", build_index(engine), t0)
+        elif step == "rag-eval":
+            from rag.evaluation import run_evaluation
+            _print("rag-eval", run_evaluation(engine), t0)
         elif step == "risk":
             from app.services.risk_scoring import run_customer_risk
             _print("risk", run_customer_risk(engine), t0)

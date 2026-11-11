@@ -81,6 +81,33 @@ def generate_alerts(engine: Engine) -> dict:
                      "customer_id": r.customer_id, "account_id": None, "transaction_id": None,
                      "score": float(r.risk_score), "reasons": [i["label"] for i in ind]})
 
+    # Phase 2: graph intelligence alerts (time-ordered flows and suspicious networks)
+    min_score = cfg.get("pattern_min_score", 70)
+    acc_cust = dict(pd.read_sql(text("SELECT account_id, customer_id FROM accounts"), engine).values)
+    pats = pd.read_sql(text("SELECT id, pattern_type, account_ids, customer_ids, transaction_ids, hops, start_amount, "
+                            "duration_hours, score FROM graph_patterns WHERE score >= :m"), engine, params={"m": min_score})
+    for r in pats.itertuples():
+        acc = json.loads(r.account_ids) if isinstance(r.account_ids, str) else r.account_ids
+        txs = json.loads(r.transaction_ids) if isinstance(r.transaction_ids, str) else r.transaction_ids
+        kind = "CIRCULAR_FLOW" if r.pattern_type == "CYCLE" else "LAYERING_CHAIN"
+        rows.append({"alert_type": kind, "source": "GRAPH", "severity": _severity(r.score),
+                     "customer_id": acc_cust[acc[0]], "account_id": acc[0], "transaction_id": int(txs[0]),
+                     "score": float(r.score),
+                     "reasons": [f"{'Circular' if kind == 'CIRCULAR_FLOW' else 'Layered'} flow over {r.hops} hops in "
+                                 f"{r.duration_hours:.0f}h starting at {r.start_amount:,.2f}",
+                                 "Route: " + " -> ".join(acc), f"Graph pattern #{r.id}"]})
+    nets = pd.read_sql(text("SELECT id, account_ids, customer_ids, size, risk_score, typology_hints, hubs "
+                            "FROM suspicious_networks WHERE risk_level = 'HIGH'"), engine)
+    for r in nets.itertuples():
+        hubs = json.loads(r.hubs) if isinstance(r.hubs, str) else r.hubs
+        hints = json.loads(r.typology_hints) if isinstance(r.typology_hints, str) else r.typology_hints
+        accs = json.loads(r.account_ids) if isinstance(r.account_ids, str) else r.account_ids
+        anchor = hubs[0]["account_id"] if hubs else accs[0]
+        cust = acc_cust[anchor]
+        rows.append({"alert_type": "SUSPICIOUS_NETWORK", "source": "GRAPH", "severity": _severity(r.risk_score),
+                     "customer_id": cust, "account_id": anchor, "transaction_id": None, "score": float(r.risk_score),
+                     "reasons": [f"Network #{r.id} of {r.size} accounts"] + hints})
+
     out = pd.DataFrame(rows)
     out["status"] = "OPEN"
     out["reasons"] = out["reasons"].map(json.dumps)

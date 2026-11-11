@@ -1,27 +1,161 @@
 {
   "_note": "Synthetic demo configuration. Country list is illustrative only and not a statement about any jurisdiction.",
-  "scoring_version": "customer-risk-v1",
-  "high_risk_countries": ["AE", "PA", "KY", "CY", "HK", "TR"],
+  "scoring_version": "customer-risk-v2-graph",
+  "high_risk_countries": [
+    "AE",
+    "PA",
+    "KY",
+    "CY",
+    "HK",
+    "TR"
+  ],
   "transaction_risk": {
     "fraud_weight": 0.8,
     "anomaly_weight": 0.2,
     "anomaly_percentile_floor": 0.95,
-    "bands": {"HIGH": 60, "MEDIUM": 30}
+    "bands": {
+      "HIGH": 60,
+      "MEDIUM": 30
+    }
   },
   "customer_risk": {
-    "levels": {"HIGH": 60, "MEDIUM": 30},
+    "levels": {
+      "HIGH": 60,
+      "MEDIUM": 30
+    },
     "indicators": [
-      {"code": "HIGH_RISK_TRANSACTIONS", "label": "Transactions with high ML risk", "metric": "high_risk_tx_count", "op": ">=", "threshold": 2, "weight": 30},
-      {"code": "MAX_FRAUD_PROBABILITY", "label": "Peak ML suspicion probability", "metric": "max_fraud_probability", "op": ">=", "threshold": 0.8, "weight": 15},
-      {"code": "NEW_BENEFICIARIES", "label": "Many new counterparties in last 30 days", "metric": "new_counterparties_30d", "op": ">=", "threshold": 8, "weight": 10},
-      {"code": "VOLUME_SPIKE", "label": "Outgoing volume well above own baseline", "metric": "volume_change_ratio", "op": ">=", "threshold": 3.0, "weight": 10},
-      {"code": "PASS_THROUGH", "label": "Funds leave soon after arriving (pass-through)", "metric": "pass_through_ratio", "op": "between", "threshold": [0.85, 1.15], "weight": 10, "min_metric": {"total_in": 20000}},
-      {"code": "HIGH_RISK_GEOGRAPHY", "label": "Share of activity with elevated-risk jurisdictions", "metric": "high_risk_country_share", "op": ">=", "threshold": 0.2, "weight": 10},
-      {"code": "NEAR_THRESHOLD", "label": "Repeated amounts just below 10,000 reporting threshold", "metric": "near_threshold_count", "op": ">=", "threshold": 3, "weight": 15},
-      {"code": "NIGHT_ACTIVITY", "label": "Unusual share of night-time transactions", "metric": "night_tx_share", "op": ">=", "threshold": 0.3, "weight": 5, "min_metric": {"tx_out_count": 5}},
-      {"code": "PEP", "label": "Politically exposed person", "metric": "pep_flag", "op": "==", "threshold": true, "weight": 10},
-      {"code": "NEW_RELATIONSHIP", "label": "Customer onboarded recently (< 90 days)", "metric": "relationship_days", "op": "<", "threshold": 90, "weight": 5},
-      {"code": "HOME_HIGH_RISK", "label": "Customer domiciled in elevated-risk jurisdiction", "metric": "home_country_high_risk", "op": "==", "threshold": true, "weight": 5}
+      {
+        "code": "HIGH_RISK_TRANSACTIONS",
+        "label": "Transactions with high ML risk",
+        "metric": "high_risk_tx_count",
+        "op": ">=",
+        "threshold": 2,
+        "weight": 30
+      },
+      {
+        "code": "MAX_FRAUD_PROBABILITY",
+        "label": "Peak ML suspicion probability",
+        "metric": "max_fraud_probability",
+        "op": ">=",
+        "threshold": 0.8,
+        "weight": 15
+      },
+      {
+        "code": "NEW_BENEFICIARIES",
+        "label": "Many new counterparties in last 30 days",
+        "metric": "new_counterparties_30d",
+        "op": ">=",
+        "threshold": 8,
+        "weight": 10
+      },
+      {
+        "code": "VOLUME_SPIKE",
+        "label": "Outgoing volume well above own baseline",
+        "metric": "volume_change_ratio",
+        "op": ">=",
+        "threshold": 3.0,
+        "weight": 10
+      },
+      {
+        "code": "PASS_THROUGH",
+        "label": "Funds leave soon after arriving (pass-through)",
+        "metric": "pass_through_ratio",
+        "op": "between",
+        "threshold": [
+          0.85,
+          1.15
+        ],
+        "weight": 10,
+        "min_metric": {
+          "total_in": 20000
+        }
+      },
+      {
+        "code": "HIGH_RISK_GEOGRAPHY",
+        "label": "Share of activity with elevated-risk jurisdictions",
+        "metric": "high_risk_country_share",
+        "op": ">=",
+        "threshold": 0.2,
+        "weight": 10
+      },
+      {
+        "code": "NEAR_THRESHOLD",
+        "label": "Repeated amounts just below 10,000 reporting threshold",
+        "metric": "near_threshold_count",
+        "op": ">=",
+        "threshold": 3,
+        "weight": 15
+      },
+      {
+        "code": "NIGHT_ACTIVITY",
+        "label": "Unusual share of night-time transactions",
+        "metric": "night_tx_share",
+        "op": ">=",
+        "threshold": 0.3,
+        "weight": 5,
+        "min_metric": {
+          "tx_out_count": 5
+        }
+      },
+      {
+        "code": "PEP",
+        "label": "Politically exposed person",
+        "metric": "pep_flag",
+        "op": "==",
+        "threshold": true,
+        "weight": 10
+      },
+      {
+        "code": "NEW_RELATIONSHIP",
+        "label": "Customer onboarded recently (< 90 days)",
+        "metric": "relationship_days",
+        "op": "<",
+        "threshold": 90,
+        "weight": 5
+      },
+      {
+        "code": "HOME_HIGH_RISK",
+        "label": "Customer domiciled in elevated-risk jurisdiction",
+        "metric": "home_country_high_risk",
+        "op": "==",
+        "threshold": true,
+        "weight": 5
+      },
+      {
+        "code": "CIRCULAR_FLOW",
+        "label": "Account takes part in time-ordered circular money flow",
+        "metric": "graph_cycle_count",
+        "op": ">=",
+        "threshold": 1,
+        "weight": 20
+      },
+      {
+        "code": "LAYERING_CHAIN",
+        "label": "Account is a hop in a layering chain",
+        "metric": "graph_chain_count",
+        "op": ">=",
+        "threshold": 1,
+        "weight": 10
+      },
+      {
+        "code": "SUSPICIOUS_NETWORK",
+        "label": "Member of a high-risk suspicious network",
+        "metric": "network_risk_score",
+        "op": ">=",
+        "threshold": 60,
+        "weight": 15
+      },
+      {
+        "code": "RISKY_NEIGHBOURHOOD",
+        "label": "Many counterparties have high-risk transactions",
+        "metric": "neighbour_high_risk_share",
+        "op": ">=",
+        "threshold": 0.3,
+        "weight": 10,
+        "min_metric": {
+          "distinct_counterparties": 3
+        }
+      }
     ]
   },
   "alerts": {
@@ -29,6 +163,10 @@
     "anomaly_percentile": 0.997,
     "structuring_min_count": 3,
     "structuring_window_days": 7,
-    "near_threshold_range": [9000, 10000]
+    "near_threshold_range": [
+      9000,
+      10000
+    ],
+    "pattern_min_score": 70
   }
 }

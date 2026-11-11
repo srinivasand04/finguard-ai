@@ -15,7 +15,8 @@ SessionDep = Annotated[Session, Depends(get_session)]
 @router.get("", response_model=Page[AlertOut], summary="List alerts (read-only in Phase 1)")
 def list_alerts(session: SessionDep,
                 alert_type: Literal["HIGH_RISK_TRANSACTION", "ANOMALOUS_TRANSACTION", "POSSIBLE_STRUCTURING",
-                                    "HIGH_RISK_CUSTOMER"] | None = None,
+                                    "HIGH_RISK_CUSTOMER", "CIRCULAR_FLOW", "LAYERING_CHAIN",
+                                    "SUSPICIOUS_NETWORK"] | None = None,
                 severity: Literal["MEDIUM", "HIGH", "CRITICAL"] | None = None,
                 status: str | None = None, customer_id: str | None = None,
                 page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200)):
