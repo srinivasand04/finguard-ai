@@ -7,12 +7,16 @@ import CustomerPage from './pages/CustomerPage'
 import Alerts from './pages/Alerts'
 import Models from './pages/Models'
 import ScoreTester from './pages/ScoreTester'
+import Network from './pages/Network'
+import Compliance from './pages/Compliance'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/transactions', label: 'Transactions' },
   { to: '/customers', label: 'Customers' },
   { to: '/alerts', label: 'Alerts' },
+  { to: '/network', label: 'Network' },
+  { to: '/compliance', label: 'Compliance assistant' },
   { to: '/models', label: 'Models' },
   { to: '/score', label: 'Live scoring' },
 ]
@@ -26,7 +30,7 @@ export default function App() {
             <img src="/shield.svg" alt="" className="h-6 w-6" />
             <div>
               <div className="text-sm font-semibold text-white">FinGuard AI</div>
-              <div className="text-[11px] text-slate-400">Phase 1 · Detection</div>
+              <div className="text-[11px] text-slate-400">Phase 2 · Graph + RAG</div>
             </div>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0">
@@ -52,6 +56,8 @@ export default function App() {
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/models" element={<Models />} />
             <Route path="/score" element={<ScoreTester />} />
+            <Route path="/network" element={<Network />} />
+            <Route path="/compliance" element={<Compliance />} />
             <Route path="*" element={<p className="text-slate-500">Page not found.</p>} />
           </Routes>
         </main>
