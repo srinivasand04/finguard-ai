@@ -29,6 +29,10 @@ const PROFILE_LABELS: [string, string, (v: number) => string][] = [
   ['near_threshold_count', 'Amounts just below 10k', fmtInt],
   ['high_risk_tx_count', 'High-risk transactions', fmtInt],
   ['max_fraud_probability', 'Peak ML probability', v => v.toFixed(3)],
+  ['graph_cycle_count', 'Circular flows (graph)', fmtInt],
+  ['graph_chain_count', 'Layering chains (graph)', fmtInt],
+  ['network_risk_score', 'Suspicious network score', v => v.toFixed(0)],
+  ['neighbour_high_risk_share', 'Risky neighbours', v => pct(v)],
 ]
 
 export default function CustomerPage() {
@@ -56,6 +60,7 @@ export default function CustomerPage() {
           <span className="text-sm text-slate-500">{d.customer_id}</span>
           <Badge value={d.risk_level} />
           {d.pep_flag && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">PEP</span>}
+          <Link to={`/network?customer_id=${d.customer_id}`} className="text-sm text-blue-600 hover:underline">View money-flow network →</Link>
         </div>
         <p className="text-sm text-slate-500">{d.segment} · {d.occupation} · {d.country} · KYC {d.kyc_level} · customer since {d.onboarding_date}</p>
       </div>

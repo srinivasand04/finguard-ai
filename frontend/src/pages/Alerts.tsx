@@ -29,6 +29,9 @@ export default function Alerts() {
             <option value="ANOMALOUS_TRANSACTION">Anomalous transaction</option>
             <option value="POSSIBLE_STRUCTURING">Possible structuring (rule)</option>
             <option value="HIGH_RISK_CUSTOMER">High-risk customer</option>
+            <option value="CIRCULAR_FLOW">Circular flow (graph)</option>
+            <option value="LAYERING_CHAIN">Layering chain (graph)</option>
+            <option value="SUSPICIOUS_NETWORK">Suspicious network (graph)</option>
           </select>
           <select className="input" value={sp.get('severity') ?? ''} onChange={e => set('severity', e.target.value)}>
             <option value="">All severities</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option>
@@ -61,7 +64,7 @@ export default function Alerts() {
             </article>
           ))}
           <Pager page={page} size={data.size} total={data.total} onPage={p => set('page', String(p))} />
-          <p className="text-xs text-slate-500">Alerts are read-only in Phase 1. Case creation, triage and approval workflows arrive in Phase 3.</p>
+          <p className="text-xs text-slate-500">Alerts are read-only for now. Case creation, triage and approval workflows arrive in Phase 3.</p>
           <Disclaimer />
         </div>
       )}
