@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:4b"
+    ollama_num_ctx: int = 4096      # 5 passages + question fit in ~1.5k tokens; smaller context = less RAM
+    llm_max_tokens: int = 300       # answers are capped at ~6 sentences anyway; bounds latency on CPU
     llm_timeout_seconds: float = 120.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

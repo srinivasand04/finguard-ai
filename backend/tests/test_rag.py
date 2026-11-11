@@ -127,3 +127,26 @@ def test_retrieval_eval_runs(pipeline):
     out = run_evaluation(pipeline["engine"], with_answers=False)
     assert set(out["retrieval"]) == {"bm25", "dense", "hybrid"}
     assert out["retrieval"]["hybrid"]["hit@5"] >= 0.6   # even the offline hashing embedder finds most answers
+
+
+def test_structured_answer_parsing():
+    from rag.llm import parse_structured_answer
+
+    assert parse_structured_answer('{"answer": "Kept 5 years [1]."}') == "Kept 5 years [1]."
+    assert parse_structured_answer("plain text answer [1]") == "plain text answer [1]"
+
+
+def test_refusal_and_reasoning_leak_detection(monkeypatch):
+    from rag.answer import is_reasoning_leak, is_refusal
+
+    assert is_refusal(NOT_COVERED) and is_refusal("  " + NOT_COVERED.upper())
+    # quoting the rule inside reasoning is NOT a refusal - this fooled the first evaluation run
+    quoted = f'First, I need to check the rules: reply "{NOT_COVERED}" if missing. Records are kept 5 years [1].'
+    assert not is_refusal(quoted) and is_reasoning_leak(quoted)
+    assert is_reasoning_leak("Okay, let me tackle this question step by step.")
+    assert not is_reasoning_leak("Records are retained for at least 5 years [1].")
+
+    monkeypatch.setattr("rag.answer.resolve_provider", lambda p=None: "ollama")
+    monkeypatch.setattr("rag.answer.complete", lambda s, u, p: ("Okay, let me think. Source [1] says 5 years.", "fake"))
+    out = answer_question(FakeRetriever(), "How long are records kept?")
+    assert out["answer_type"] == "reasoning_leak" and not out["grounded"] and out["warnings"]
