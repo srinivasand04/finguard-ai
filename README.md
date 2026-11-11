@@ -2,11 +2,11 @@
 
 **A hands-on learning project: building an intelligent financial-crime investigation platform, one type of intelligent system at a time.**
 
-FinGuard AI helps (simulated) bank analysts find suspicious money movement, understand customer risk, and - in later phases - investigate cases with graph analytics, compliance RAG and collaborating AI agents. Each phase adds a different family of intelligent system on top of the last, so the repository doubles as a worked example of how they fit together in one production-style application.
+FinGuard AI helps (simulated) bank analysts find suspicious money movement, understand customer risk, trace money through networks of accounts, and ask cited questions of AML/KYC policy - and, in later phases, investigate cases with collaborating AI agents. Each phase adds a different family of intelligent system on top of the last, so the repository doubles as a worked example of how they fit together in one production-style application.
 
 > All data is synthetic. Scores, risk bands and alerts are **investigative indicators for human review - never determinations of fraud**.
 
-![Phase](https://img.shields.io/badge/phase-1%20of%204%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-33%20passing-16a34a)
+![Phase](https://img.shields.io/badge/phase-2%20of%204%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-55%20passing-16a34a)
 
 ## Intelligent system types covered
 
@@ -17,8 +17,8 @@ FinGuard AI helps (simulated) bank analysts find suspicious money movement, unde
 | 3 | **Rule-based / expert system** | Encodes analyst knowledge as transparent, configurable rules | Structuring rule, weighted risk indicators in JSON config | 1 | Done |
 | 4 | **Explainable AI (XAI)** | Shows *why* each score is what it is | Per-transaction TreeSHAP contributions, indicator-level reasons | 1 | Done |
 | 5 | **Real-time decisioning** | Scores a new transaction against live history | Shared point-in-time feature pipeline for batch + online | 1 | Done |
-| 6 | **Graph intelligence** | Finds rings, mule networks and money chains | NetworkX centrality, cycles, communities, paths | 2 | Planned |
-| 7 | **Knowledge system (RAG)** | Answers AML/KYC policy questions with citations | Chunking, embeddings, Qdrant, hybrid search, reranking, RAGAS | 2 | Planned |
+| 6 | **Graph intelligence** | Finds round-tripping, layering chains and mule networks | NetworkX PageRank, betweenness, Louvain communities, time-ordered cycle/chain search, shortest paths | 2 | Done |
+| 7 | **Knowledge system (RAG)** | Answers AML/KYC policy questions with verified citations | PDF/DOCX extraction, section-aware chunking, Sentence Transformers, Qdrant, BM25 + RRF hybrid search, cross-encoder reranking, Claude / OpenAI / local Ollama, labelled evaluation | 2 | Done |
 | 8 | **Multi-agent system** | Specialist agents collaborate on an investigation | LangGraph supervisor, shared state, routing, retries | 3 | Planned |
 | 9 | **Tool-using AI (MCP)** | Agents act only through approved, permissioned tools | Python MCP SDK, validation, audit | 3 | Planned |
 | 10 | **Human-in-the-loop governance** | People approve, reject or escalate - AI never decides alone | Approvals, audit trails, RBAC, observability (Langfuse) | 3-4 | Started (audit log) |
@@ -29,28 +29,44 @@ FinGuard AI helps (simulated) bank analysts find suspicious money movement, unde
 flowchart TB
     subgraph Data["Data layer"]
         G[AMLSim-format generator] --> V[Validate & clean] --> PG[(PostgreSQL)]
+        DOCS[Policy PDFs / DOCX / TXT / MD]
     end
     subgraph Detect["Detection engine - Phase 1"]
         F[Point-in-time features] --> XGB[XGBoost<br/>supervised]
         F --> IF[Isolation Forest<br/>unsupervised]
         XGB --> RS[Transaction risk score<br/>+ explanations]
         IF --> RS
-        RS --> CR[Customer risk<br/>indicator rules]
-        RS --> AL[Alerts]
-        CR --> AL
     end
-    subgraph Later["Phases 2-4"]
-        GR[Graph intelligence]
-        RAG[Compliance RAG]
-        AG[LangGraph agents + MCP tools]
-        HR[Human review & approvals]
+    subgraph Graph["Graph intelligence - Phase 2"]
+        GE[Money-flow graph] --> GM[PageRank, betweenness,<br/>Louvain communities]
+        GE --> GP[Time-ordered cycles<br/>& layering chains]
+        GP --> GN[Suspicious networks]
+    end
+    subgraph Know["Knowledge engine - Phase 2"]
+        CH[Extract & section-aware chunks] --> EMB[Embeddings in Qdrant]
+        CH --> BM[BM25]
+        EMB --> HY[Hybrid RRF + rerank]
+        BM --> HY
+        HY --> LLM[LLM answer with<br/>verified citations]
     end
     PG --> F
+    RS --> GE
+    RS --> CR[Customer risk<br/>indicator rules]
+    GM --> CR
+    GN --> CR
+    RS --> AL[Alerts]
+    GP --> AL
+    GN --> AL
+    CR --> AL
+    DOCS --> CH
     AL --> API[FastAPI + Redis] --> UI[React dashboard]
+    LLM --> API
+    subgraph Later["Phases 3-4"]
+        AG[LangGraph agents + MCP tools] --> HR[Human review & approvals]
+    end
     AL -.-> AG
-    GR -.-> AG
-    RAG -.-> AG
-    AG -.-> HR
+    GN -.-> AG
+    LLM -.-> AG
 ```
 
 ## What I learned building Phase 1
@@ -62,6 +78,17 @@ flowchart TB
 - **One feature function for batch and real-time** prevents the training/serving skew common in production ML.
 
 Full write-up: [docs/phase1_report.md](docs/phase1_report.md).
+
+## What I learned building Phase 2
+
+- **Graph context is what exposes mule accounts.** Adding four graph indicators to customer risk raised recall of laundering customers from **17% to 83%**, and precision also rose (88% → 91%). Mule accounts look ordinary one transaction at a time; their connections give them away.
+- **Aggregation destroys the signal.** Cycles on an aggregated account graph are everywhere (payroll, suppliers, refunds). Following individual transactions *forward in time* while they keep their value turned cycle detection into a 75%-precision detector that finds 100% of simulated round-tripping.
+- **"Unusual for whom?"** The first layering-chain detector flagged 4,074 chains at 1.5% precision, because busy businesses forward similar amounts every day. Requiring each hop to be large *for that account's own baseline* cut the noise 4.7x.
+- **Fusion is not enough; reranking is.** Dense vectors match paraphrases ("splitting deposits" → *structuring*) and BM25 matches exact thresholds ("EUR 15,000", "25%"). Fusing them with RRF made the right passage appear in the top 3 every time, but slightly *lowered* top-1 accuracy (0.65). A cross-encoder reranker lifted top-1 to **0.87** and MRR to **0.92** on a labelled question set.
+- **Grounding needs guardrails, not just a prompt.** Citations are validated after generation, unsupported questions must be refused, and with no LLM the system quotes sources instead of inventing text.
+- **Design for the machine you have.** The whole stack runs locally: Qdrant in Docker, CPU embeddings, and a 4B model in Ollama. Claude or OpenAI can be switched on with an API key.
+
+Full write-up: [docs/phase2_report.md](docs/phase2_report.md).
 
 ## What Phase 1 contains
 
@@ -81,20 +108,36 @@ Full write-up: [docs/phase1_report.md](docs/phase1_report.md).
 | Tests | 33 pytest tests (unit + full-pipeline integration + every endpoint) | `backend/tests/` |
 | Results | Model evaluation and design decisions | `docs/phase1_report.md` |
 
+## What Phase 2 adds
+
+| Area | What is built | Where |
+|---|---|---|
+| Money-flow graph | Aggregated account graph, PageRank, betweenness, Louvain communities | `backend/graph/builder.py`, `analytics.py` |
+| Flow patterns | Time-ordered circular flows and layering chains, each tied to its exact transactions | `backend/graph/patterns.py` |
+| Suspicious networks | Risk subgraph → reviewable groups with hub roles and typology hints | `backend/graph/analytics.py` |
+| Risk integration | 4 graph indicators in customer risk, 3 graph alert types | `backend/config/risk_config.json`, `app/services/` |
+| Compliance corpus | 8 policy documents in PDF / DOCX / TXT / MD | `backend/rag/corpus.py` → `documents/` |
+| RAG pipeline | Section-aware extraction + chunking, Sentence Transformers, Qdrant, BM25, RRF, cross-encoder rerank | `backend/rag/` |
+| Answers | Claude / OpenAI / local Ollama / extractive fallback, verified citations, injection guard | `backend/rag/answer.py`, `llm.py` |
+| Evaluation | Graph detection vs ground truth; labelled 25-question RAG set (retrieval + answer metrics) | `backend/graph/pipeline.py`, `backend/rag/evaluation.py` |
+| API | 8 graph + 6 compliance endpoints | `backend/app/api/routers/graph.py`, `compliance.py` |
+| Dashboard | Network explorer (Cytoscape.js: ego networks, patterns, networks, shortest path) and Compliance assistant | `frontend/src/pages/Network.tsx`, `Compliance.tsx` |
+| CI | GitHub Actions: 56 backend tests + frontend build on every push | `.github/workflows/ci.yml` |
+
 ## Quick start (Windows / macOS / Linux)
 
 Prerequisites: Docker Desktop, Python 3.12, Node 20+.
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres redis          # Postgres on localhost:55432, Redis on localhost:6380
+docker compose up -d postgres redis qdrant   # Postgres :55432, Redis :6380, Qdrant :6333
 ```
 
 ```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt     # macOS/Linux: .venv/bin/pip
-.venv/Scripts/python -m app.cli all               # init DB, generate, ingest, EDA, train, score, risk, alerts (~5 min)
+.venv/Scripts/python -m app.cli all               # data, ML, graph, risk, alerts, RAG index (~10 min; downloads 2 small models)
 .venv/Scripts/python -m uvicorn app.main:app --port 8000
 ```
 
@@ -118,9 +161,16 @@ python -m app.cli ingest --source ../data/raw/amlsim     # works with real AMLSi
 python -m app.cli eda
 python -m app.cli train
 python -m app.cli score
+python -m app.cli graph       # Phase 2: graph intelligence
 python -m app.cli risk
 python -m app.cli alerts
+python -m app.cli rag-build   # Phase 2: compliance corpus -> chunks -> Qdrant
+python -m app.cli rag-eval    # Phase 2: retrieval + answer evaluation
 ```
+
+### LLM for the compliance assistant
+
+`LLM_PROVIDER=auto` (default) uses the first that is available: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → a running [Ollama](https://ollama.com) (`ollama pull qwen3:4b`) → extractive mode (quotes the best passages, no LLM). Set these in `.env`.
 
 ### Run everything in Docker (optional)
 
@@ -136,7 +186,7 @@ cd backend
 .venv/Scripts/python -m pytest -q
 ```
 
-The test suite generates a small dataset, runs the **whole pipeline** into a throwaway SQLite database and calls every API endpoint - no Docker needed.
+The test suite (56 tests) generates a small dataset, runs the **whole pipeline** - ML, graph and RAG - into a throwaway SQLite database with an in-process Qdrant and an offline embedder, and calls every API endpoint. No Docker or model downloads needed; the same suite runs in GitHub Actions.
 
 ## Reviewing Phase 1 - suggested checklist
 
@@ -146,22 +196,26 @@ The test suite generates a small dataset, runs the **whole pipeline** into a thr
 4. **Models**: `docs/phase1_report.md`, `models/evaluation_*.json`, or the Models page.
 5. **API**: http://localhost:8000/docs - try `GET /api/v1/customers?risk_level=HIGH` and `POST /api/v1/transactions/score`.
 6. **UI**: open a high-risk customer → indicators, profile, velocity, counterparties, transactions → click a transaction → explanation.
-7. **Audit**: `GET /api/v1/audit-logs` shows ingestion, training, scoring and scoring-request events.
+7. **Audit**: `GET /api/v1/audit-logs` shows ingestion, training, scoring, graph, RAG and question events.
+8. **Graph (Phase 2)**: Network page → open the top suspicious network, a circular flow (hops listed in time order), and a customer's ego network; `docs/phase2_report.md` for detection metrics.
+9. **RAG (Phase 2)**: Compliance assistant → ask an example question, click the citation chips, compare hybrid vs BM25 vs dense.
 
 ## Repository layout
 
 ```
-backend/   app/ (API, services, models)  ml/ (features, training, scoring, EDA)  data_gen/  config/  tests/
+backend/   app/ (API, services, models)  ml/ (features, training, scoring, EDA)  graph/  rag/  data_gen/  config/  tests/
+documents/ compliance corpus (generated by rag-build; real PDFs can be added)
 frontend/  React + TypeScript + Tailwind dashboard
 data/      raw/ processed/ synthetic/        (generated, git-ignored)
 models/    fraud/ anomaly/ evaluation_*.json (generated, git-ignored)
-docs/      phase1_report.md  database_design.md  api_documentation.md  eda_report.md
+docs/      phase1_report.md  phase2_report.md  database_design.md  api_documentation.md  eda_report.md
 infrastructure/postgres/init.sql
 docker-compose.yml  .env.example
 ```
 
 ## Roadmap
 
-- **Phase 2** - Graph intelligence (NetworkX: cycles, communities, centrality) + compliance RAG (Qdrant, citations, RAGAS)
+- ~~Phase 1~~ - Data, ML detection, customer risk, API, dashboard - **done**
+- ~~Phase 2~~ - Graph intelligence + compliance RAG - **done**
 - **Phase 3** - LangGraph multi-agent investigations, MCP server, evidence & case management, approvals
 - **Phase 4** - Full frontend, auth/RBAC, Langfuse observability, CI/CD, deployment
