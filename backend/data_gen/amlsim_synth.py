@@ -242,28 +242,36 @@ class Generator:
         for alert_id in range(self.cfg.alerts):
             typ = TYPOLOGIES[alert_id % len(TYPOLOGIES)]
             base = float(r.lognormal(8.1, 0.5))  # ~3.3k median, overlaps SME business payments
-            w_start = self.start + timedelta(days=int(r.integers(0, self.cfg.days - 30)))
+            # leave room at the end: time-ordered typologies can span several weeks
+            w_start = self.start + timedelta(days=int(r.integers(0, max(self.cfg.days - 50, self.cfg.days * 2 // 3))))
             w_end = w_start + timedelta(days=int(r.integers(4, 25)))
             nb = 0.3
 
-            def t():
-                return self._rand_times(1, w_start, w_end, night_bias=nb)[0]
+            def t(lo=None, hi=None):
+                return self._rand_times(1, lo or w_start, hi or w_end, night_bias=nb)[0]
+
+            def after(ts):
+                # money is forwarded a few hours to a few days after it arrives
+                return ts + timedelta(hours=float(r.uniform(2, 72)))
 
             def amt(scale=1.0):
                 return base * scale * r.uniform(0.85, 1.1)
 
-            def tx(a, b, amount, ttype=None):
+            def tx(a, b, amount, ttype=None, at=None):
                 if a == b:
-                    return
+                    return None
                 if ttype is None:
                     # same typing rule as normal activity, so tx type is not a give-away
                     if accounts.at[b, "COUNTRY"] != accounts.at[a, "COUNTRY"] and r.random() < 0.7:
                         ttype = "WIRE"
                     else:
                         ttype = "PAYMENT" if accounts.at[b, "SEGMENT"] != "RETAIL" else "TRANSFER"
-                self._add(acc_ids[a], acc_ids[b], ttype, amount, t(), True, alert_id)
+                at = at or t()
+                self._add(acc_ids[a], acc_ids[b], ttype, amount, at, True, alert_id)
                 is_sar[a] = is_sar[b] = True
+                return at
 
+            mid_window = w_start + (w_end - w_start) / 2
             if typ == "fan_out":
                 src, *dst = pick(int(r.integers(6, 13)))
                 for d in dst:
@@ -273,25 +281,27 @@ class Generator:
                 for s in src:
                     tx(s, dst, amt(0.6))
             elif typ == "cycle":
+                # hops are time-ordered: A->B, then B->C, ... back to A
                 ring = pick(int(r.integers(3, 7)))
                 a = amt(2.0)
+                cur = t(w_start, mid_window)
                 for _ in range(int(r.integers(1, 4))):
                     for k in range(len(ring)):
-                        tx(ring[k], ring[(k + 1) % len(ring)], a)
+                        cur = tx(ring[k], ring[(k + 1) % len(ring)], a, at=cur)
+                        cur = after(cur)
                         a *= r.uniform(0.95, 0.99)
             elif typ == "scatter_gather":
                 src, dst, *mid = pick(int(r.integers(5, 10)))
                 for m_ in mid:
                     a = amt(0.8)
-                    tx(src, m_, a)
-                    tx(m_, dst, a * r.uniform(0.93, 0.98))
+                    t1 = tx(src, m_, a, at=t(w_start, mid_window))
+                    tx(m_, dst, a * r.uniform(0.93, 0.98), at=after(t1))
             elif typ == "gather_scatter":
                 hub, *rest = pick(int(r.integers(7, 13)))
                 half = len(rest) // 2
-                for s in rest[:half]:
-                    tx(s, hub, amt(0.7))
+                last_in = max(tx(s, hub, amt(0.7), at=t(w_start, mid_window)) for s in rest[:half])
                 for d in rest[half:]:
-                    tx(hub, d, amt(0.65))
+                    tx(hub, d, amt(0.65), at=after(last_in))
             elif typ == "bipartite":
                 grp = pick(int(r.integers(6, 10)))
                 left, right = grp[: len(grp) // 2], grp[len(grp) // 2:]
@@ -300,11 +310,12 @@ class Generator:
                         if r.random() < 0.7:
                             tx(a_, b_, amt(0.5))
             elif typ == "stack":
+                # layered: every layer forwards only after the previous layer has paid in
                 layers = [pick(int(r.integers(2, 4))) for _ in range(3)]
+                stage_end = t(w_start, mid_window)
                 for l1, l2 in zip(layers[:-1], layers[1:]):
-                    for a_ in l1:
-                        for b_ in l2:
-                            tx(a_, b_, amt(0.5))
+                    times = [tx(a_, b_, amt(0.5), at=after(stage_end)) for a_ in l1 for b_ in l2]
+                    stage_end = max([x for x in times if x is not None] or [stage_end])
             elif typ == "structuring":
                 src, *dst = pick(int(r.integers(2, 4)))
                 for _ in range(int(r.integers(6, 14))):

@@ -1,7 +1,9 @@
-"""PostgreSQL schema (Phase 1 tables).
+"""PostgreSQL schema.
 
-Phase 1 creates: customers, accounts, transactions, fraud_predictions,
-customer_risk, alerts, model_versions, audit_logs.
+Phase 1: customers, accounts, transactions, fraud_predictions, customer_risk,
+         alerts, model_versions, audit_logs.
+Phase 2: graph_edges, account_graph_metrics, graph_patterns, suspicious_networks
+         (graph intelligence); compliance_documents, compliance_chunks (RAG).
 Investigation/evidence/report/approval tables arrive in Phase 3.
 """
 from datetime import date, datetime
@@ -64,6 +66,7 @@ class Transaction(Base):
     # Simulator labels (training/evaluation only)
     sim_is_sar: Mapped[bool] = mapped_column(Boolean, default=False)
     sim_alert_id: Mapped[int | None] = mapped_column(Integer)
+    sim_alert_type: Mapped[str | None] = mapped_column(String(30))  # simulator typology (evaluation only)
     source_file: Mapped[str | None] = mapped_column(String(120))
     ingested_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -146,3 +149,102 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(60))
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+# --------------------------------------------------------------------------- Phase 2: graph intelligence
+class GraphEdge(Base):
+    """Money-flow edge between two accounts, aggregated over all their transactions."""
+    __tablename__ = "graph_edges"
+    id: Mapped[int] = mapped_column(BigID, primary_key=True, autoincrement=True)
+    src_account_id: Mapped[str] = mapped_column(ForeignKey("accounts.account_id"), index=True)
+    dst_account_id: Mapped[str] = mapped_column(ForeignKey("accounts.account_id"), index=True)
+    tx_count: Mapped[int] = mapped_column(Integer)
+    total_amount: Mapped[float] = mapped_column(Float)
+    first_ts: Mapped[datetime] = mapped_column(DateTime)
+    last_ts: Mapped[datetime] = mapped_column(DateTime)
+    max_risk_score: Mapped[float] = mapped_column(Float, default=0)
+    high_risk_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_cross_border: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (UniqueConstraint("src_account_id", "dst_account_id"),)
+
+
+class AccountGraphMetrics(Base):
+    __tablename__ = "account_graph_metrics"
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.account_id"), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    in_degree: Mapped[int] = mapped_column(Integer)
+    out_degree: Mapped[int] = mapped_column(Integer)
+    degree_centrality: Mapped[float] = mapped_column(Float)
+    pagerank: Mapped[float] = mapped_column(Float)
+    pagerank_percentile: Mapped[float] = mapped_column(Float)
+    betweenness: Mapped[float] = mapped_column(Float)
+    community_id: Mapped[int] = mapped_column(Integer, index=True)
+    community_size: Mapped[int] = mapped_column(Integer)
+    cycle_count: Mapped[int] = mapped_column(Integer, default=0)
+    chain_count: Mapped[int] = mapped_column(Integer, default=0)
+    network_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    neighbour_high_risk_share: Mapped[float] = mapped_column(Float, default=0)
+    graph_version: Mapped[str] = mapped_column(String(40))
+
+
+class GraphPattern(Base):
+    """A time-ordered money-flow pattern: a closed CYCLE or an open LAYERING_CHAIN."""
+    __tablename__ = "graph_patterns"
+    id: Mapped[int] = mapped_column(BigID, primary_key=True, autoincrement=True)
+    pattern_type: Mapped[str] = mapped_column(String(20), index=True)
+    account_ids: Mapped[list] = mapped_column(JSON)
+    customer_ids: Mapped[list] = mapped_column(JSON)
+    transaction_ids: Mapped[list] = mapped_column(JSON)
+    hops: Mapped[int] = mapped_column(Integer)
+    start_amount: Mapped[float] = mapped_column(Float)
+    end_amount: Mapped[float] = mapped_column(Float)
+    start_ts: Mapped[datetime] = mapped_column(DateTime)
+    end_ts: Mapped[datetime] = mapped_column(DateTime)
+    duration_hours: Mapped[float] = mapped_column(Float)
+    score: Mapped[float] = mapped_column(Float, index=True)
+    network_id: Mapped[int | None] = mapped_column(Integer, index=True)
+
+
+class SuspiciousNetwork(Base):
+    __tablename__ = "suspicious_networks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_ids: Mapped[list] = mapped_column(JSON)
+    customer_ids: Mapped[list] = mapped_column(JSON)
+    size: Mapped[int] = mapped_column(Integer)
+    edge_count: Mapped[int] = mapped_column(Integer)
+    total_value: Mapped[float] = mapped_column(Float)
+    high_risk_tx_count: Mapped[int] = mapped_column(Integer)
+    cycle_count: Mapped[int] = mapped_column(Integer)
+    chain_count: Mapped[int] = mapped_column(Integer)
+    cross_border_share: Mapped[float] = mapped_column(Float)
+    hubs: Mapped[list] = mapped_column(JSON)
+    typology_hints: Mapped[list] = mapped_column(JSON)
+    risk_score: Mapped[float] = mapped_column(Float, index=True)
+    risk_level: Mapped[str] = mapped_column(String(10), index=True)
+
+
+# --------------------------------------------------------------------------- Phase 2: compliance knowledge
+class ComplianceDocument(Base):
+    __tablename__ = "compliance_documents"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200))
+    doc_type: Mapped[str] = mapped_column(String(40), index=True)  # AML_POLICY / KYC_POLICY / ...
+    source_path: Mapped[str] = mapped_column(String(300))
+    file_format: Mapped[str] = mapped_column(String(10))
+    pages: Mapped[int | None] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ComplianceChunk(Base):
+    __tablename__ = "compliance_chunks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("compliance_documents.id"), index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(300))
+    page: Mapped[int | None] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    char_count: Mapped[int] = mapped_column(Integer)
