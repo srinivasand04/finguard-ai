@@ -6,7 +6,7 @@ FinGuard AI helps (simulated) bank analysts find suspicious money movement, unde
 
 > All data is synthetic. Scores, risk bands and alerts are **investigative indicators for human review - never determinations of fraud**.
 
-![Phase](https://img.shields.io/badge/phase-2%20of%204%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-55%20passing-16a34a)
+![Phase](https://img.shields.io/badge/phase-2%20of%204%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-58%20passing-16a34a)
 
 ## Intelligent system types covered
 
@@ -85,6 +85,7 @@ Full write-up: [docs/phase1_report.md](docs/phase1_report.md).
 - **Aggregation destroys the signal.** Cycles on an aggregated account graph are everywhere (payroll, suppliers, refunds). Following individual transactions *forward in time* while they keep their value turned cycle detection into a 75%-precision detector that finds 100% of simulated round-tripping.
 - **"Unusual for whom?"** The first layering-chain detector flagged 4,074 chains at 1.5% precision, because busy businesses forward similar amounts every day. Requiring each hop to be large *for that account's own baseline* cut the noise 4.7x.
 - **Fusion is not enough; reranking is.** Dense vectors match paraphrases ("splitting deposits" → *structuring*) and BM25 matches exact thresholds ("EUR 15,000", "25%"). Fusing them with RRF made the right passage appear in the top 3 every time, but slightly *lowered* top-1 accuracy (0.65). A cross-encoder reranker lifted top-1 to **0.87** and MRR to **0.92** on a labelled question set.
+- **Read the outputs, not just the metrics.** The first answer evaluation scored 98% fact recall - yet every output was the model's reasoning transcript, which merely *mentioned* the facts. Constraining generation to a JSON schema produced real answers 7x faster; rewording the prompt so refusal is the last resort then lifted fact recall from 0.57 to 0.78 with faithfulness 0.88. The evaluation now checks answer *format* so it cannot be fooled the same way again.
 - **Grounding needs guardrails, not just a prompt.** Citations are validated after generation, unsupported questions must be refused, and with no LLM the system quotes sources instead of inventing text.
 - **Design for the machine you have.** The whole stack runs locally: Qdrant in Docker, CPU embeddings, and a 4B model in Ollama. Claude or OpenAI can be switched on with an API key.
 
@@ -122,7 +123,7 @@ Full write-up: [docs/phase2_report.md](docs/phase2_report.md).
 | Evaluation | Graph detection vs ground truth; labelled 25-question RAG set (retrieval + answer metrics) | `backend/graph/pipeline.py`, `backend/rag/evaluation.py` |
 | API | 8 graph + 6 compliance endpoints | `backend/app/api/routers/graph.py`, `compliance.py` |
 | Dashboard | Network explorer (Cytoscape.js: ego networks, patterns, networks, shortest path) and Compliance assistant | `frontend/src/pages/Network.tsx`, `Compliance.tsx` |
-| CI | GitHub Actions: 56 backend tests + frontend build on every push | `.github/workflows/ci.yml` |
+| CI | GitHub Actions: 58 backend tests + frontend build on every push | `.github/workflows/ci.yml` |
 
 ## Quick start (Windows / macOS / Linux)
 
@@ -186,7 +187,7 @@ cd backend
 .venv/Scripts/python -m pytest -q
 ```
 
-The test suite (56 tests) generates a small dataset, runs the **whole pipeline** - ML, graph and RAG - into a throwaway SQLite database with an in-process Qdrant and an offline embedder, and calls every API endpoint. No Docker or model downloads needed; the same suite runs in GitHub Actions.
+The test suite (58 tests) generates a small dataset, runs the **whole pipeline** - ML, graph and RAG - into a throwaway SQLite database with an in-process Qdrant and an offline embedder, and calls every API endpoint. No Docker or model downloads needed; the same suite runs in GitHub Actions.
 
 ## Reviewing Phase 1 - suggested checklist
 
