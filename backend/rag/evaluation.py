@@ -12,12 +12,16 @@ deterministically against labelled facts, so they are reproducible and free:
   * faithfulness (proxy) - share of answer sentences whose content words are mostly
                            found in the sources they cite
   * refusal accuracy     - unanswerable questions get "not covered", answerable ones do not
+  * well-formed / reasoning leaks - the answer is an answer (cited, or an exact refusal), not the
+                           model's reasoning transcript. Without this check, a model that "thinks out
+                           loud" scores high fact recall simply because its reasoning mentions the facts.
 A full RAGAS run with an LLM judge can be added on top; these labelled checks are the
 regression baseline.
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime
 from statistics import mean
@@ -27,9 +31,11 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import AuditLog
-from rag.answer import NOT_COVERED, answer_question
+from rag.answer import answer_question, is_reasoning_leak, is_refusal
 from rag.llm import resolve_provider
 from rag.retrieval import Hit, get_retriever, tokenize
+
+log = logging.getLogger(__name__)
 
 # (question, expected doc_type, expected section keyword, key facts that a correct answer contains)
 EVAL_SET: list[dict] = [
@@ -111,13 +117,16 @@ def run_evaluation(engine: Engine, with_answers: bool = True, provider: str | No
     out["answer_provider"] = resolved
     if with_answers and resolved != "extractive":
         per_q = []
-        for it in EVAL_SET:
+        for n, it in enumerate(EVAL_SET, start=1):
             r = answer_question(retriever, it["q"], provider=resolved)
+            log.info("answer %d/%d in %.1fs: %s", n, len(EVAL_SET), r["latency_ms"] / 1000, it["q"])
             ans = r["answer"]
-            refused = NOT_COVERED.lower().rstrip(".") in ans.lower()
+            refused = is_refusal(ans)
             cited_rel = any(is_relevant_payload(s, it) for s in r["sources"] if s["id"] in r["cited"])
             per_q.append({
                 "question": it["q"], "answerable": bool(it["doc"]), "answer": ans, "cited": r["cited"],
+                "answer_type": r["answer_type"],
+                "reasoning_leak": is_reasoning_leak(ans),
                 "refused": refused, "latency_ms": r["latency_ms"],
                 "fact_recall": (sum(f.lower() in ans.lower() for f in it["facts"]) / len(it["facts"])) if it["facts"] else None,
                 "citation_valid": not any("invalid" in w for w in r["warnings"]),
@@ -134,6 +143,12 @@ def run_evaluation(engine: Engine, with_answers: bool = True, provider: str | No
             if any(p["faithfulness"] is not None for p in ans_q) else None,
             "refusal_accuracy": round(mean(p["refused"] != p["answerable"] for p in per_q), 3),
             "median_latency_ms": sorted(p["latency_ms"] for p in per_q)[len(per_q) // 2],
+            # answers where the LLM failed and the extractive fallback was used instead
+            "llm_fallbacks": sum(p["answer_type"] == "extractive" for p in per_q),
+            # answers that were the model's reasoning transcript rather than an answer (format failure)
+            "reasoning_leaks": sum(p["reasoning_leak"] for p in per_q),
+            # well-formed = a refusal, or an answer with at least one valid citation and no reasoning leak
+            "well_formed": round(mean((p["refused"] or bool(p["cited"])) and not p["reasoning_leak"] for p in per_q), 3),
             "per_question": per_q,
         }
     path = get_settings().models_dir / "rag"
