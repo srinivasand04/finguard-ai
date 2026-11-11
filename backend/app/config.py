@@ -17,6 +17,22 @@ class Settings(BaseSettings):
     data_dir: Path = ROOT_DIR / "data"
     risk_config_path: Path = BACKEND_DIR / "config" / "risk_config.json"
     cache_ttl_seconds: int = 60
+
+    # --- Phase 2: compliance RAG ---
+    documents_dir: Path = ROOT_DIR / "documents"
+    qdrant_url: str = "http://localhost:6333"          # ":memory:" for an in-process store (tests)
+    qdrant_collection: str = "compliance_chunks"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"   # "hashing" = offline test embedder
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"      # "" disables reranking
+    # LLM provider: auto | anthropic | openai | ollama | extractive (no LLM, quotes sources)
+    llm_provider: str = "auto"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-5-5"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen3:4b"
+    llm_timeout_seconds: float = 120.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 

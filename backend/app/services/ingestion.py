@@ -17,7 +17,8 @@ log = logging.getLogger(__name__)
 
 # Child tables first so truncation respects foreign keys
 LOAD_ORDER = ["customers", "accounts", "transactions"]
-DEPENDENTS = ["alerts", "fraud_predictions", "customer_risk"]
+DEPENDENTS = ["alerts", "fraud_predictions", "customer_risk", "graph_patterns", "suspicious_networks",
+              "account_graph_metrics", "graph_edges"]
 
 
 def bulk_insert(df: pd.DataFrame, table: str, engine: Engine) -> None:
@@ -106,6 +107,12 @@ def run_ingestion(source_dir: Path, engine: Engine, processed_dir: Path) -> dict
         "source_file": f"{source_dir.name}/transactions.csv",
     })
     tx_db["sim_alert_id"] = tx_db["sim_alert_id"].astype("Int64")
+    # AMLSim's alerts.csv names the typology of each simulated pattern (used to evaluate graph detection)
+    alert_types: dict[int, str] = {}
+    if (source_dir / "alerts.csv").exists():
+        al = pd.read_csv(source_dir / "alerts.csv", usecols=["ALERT_ID", "ALERT_TYPE"]).drop_duplicates("ALERT_ID")
+        alert_types = dict(zip(al["ALERT_ID"].astype(int), al["ALERT_TYPE"]))
+    tx_db["sim_alert_type"] = tx_db["sim_alert_id"].map(lambda a: alert_types.get(int(a)) if pd.notna(a) else None)
 
     truncate(engine, DEPENDENTS + list(reversed(LOAD_ORDER)))
     bulk_insert(customers_db, "customers", engine)

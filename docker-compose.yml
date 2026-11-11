@@ -28,16 +28,29 @@ services:
       timeout: 3s
       retries: 20
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "${QDRANT_HOST_PORT:-6333}:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
   backend:
     build: ./backend
     profiles: ["app"]
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-finguard}:${POSTGRES_PASSWORD:-finguard_dev}@postgres:5432/${POSTGRES_DB:-finguard}
       REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_URL: ${OLLAMA_URL_FROM_DOCKER:-http://host.docker.internal:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       MODELS_DIR: /models
+      DOCUMENTS_DIR: /documents
     volumes:
       - ./models:/models
       - ./data:/data
+      - ./documents:/documents
     ports:
       - "8000:8000"
     depends_on:
@@ -45,6 +58,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -56,3 +71,4 @@ services:
 
 volumes:
   pgdata:
+  qdrantdata:
