@@ -16,10 +16,12 @@ def test_ingestion_catches_injected_dirty_rows(pipeline):
 def test_tables_populated_and_consistent(pipeline):
     with pipeline["engine"].connect() as c:
         n = {t: c.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar() for t in
-             ["customers", "accounts", "transactions", "fraud_predictions", "customer_risk", "alerts", "model_versions", "audit_logs"]}
+             ["customers", "accounts", "transactions", "fraud_predictions", "customer_risk", "alerts", "model_versions",
+              "audit_logs", "graph_edges", "account_graph_metrics"]}
         assert n["fraud_predictions"] == n["transactions"] > 0
         assert n["customer_risk"] == n["customers"]
         assert n["model_versions"] == 3 and n["alerts"] > 0 and n["audit_logs"] >= 5
+        assert n["account_graph_metrics"] == n["accounts"] and n["graph_edges"] > 0
         orphans = c.execute(text("SELECT COUNT(*) FROM transactions t LEFT JOIN accounts a "
                                  "ON a.account_id = t.sender_account_id WHERE a.account_id IS NULL")).scalar()
         assert orphans == 0
