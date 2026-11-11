@@ -1,0 +1,17 @@
+FINGUARD BANK SANCTIONS SCREENING PROCEDURE
+Synthetic document for the FinGuard AI learning project. FinGuard Bank is fictional; this is not legal or regulatory advice.
+
+1 LISTS SCREENED
+The bank screens customers, beneficial owners and payment parties against the consolidated EU financial sanctions list, the UN Security Council consolidated list and any additional lists required by the jurisdictions in which the bank operates.
+
+2 CUSTOMER SCREENING
+Customers and beneficial owners are screened at onboarding and re-screened daily against list updates. Onboarding cannot be completed while a potential match is unresolved.
+
+3 PAYMENT SCREENING
+All incoming and outgoing cross-border payments are screened in real time before execution. A payment with a potential match is held until the alert is resolved.
+
+4 HANDLING POTENTIAL MATCHES
+Potential matches are reviewed by the sanctions team within 4 business hours. False positives are closed with a documented reason. Confirmed matches result in freezing of funds and a report to the competent national authority without delay; the customer must not be informed in a way that prejudices the report.
+
+5 ESCALATION
+Confirmed matches, and any case where funds may have been made available to a designated person, are escalated immediately to the Head of Compliance and the MLRO.
