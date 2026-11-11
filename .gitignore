@@ -1,0 +1,18 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+node_modules/
+frontend/dist/
+data/raw/*
+data/processed/*
+data/synthetic/*
+!data/**/.gitkeep
+models/**/*.joblib
+models/**/*.json
+!models/**/.gitkeep
+*.log
+
+# local tool config
+.claude/
