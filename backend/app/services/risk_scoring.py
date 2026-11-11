@@ -24,7 +24,7 @@ OPS = {">=": operator.ge, ">": operator.gt, "<": operator.lt, "<=": operator.le,
 
 
 def build_profiles(tx: pd.DataFrame, preds: pd.DataFrame, customers: pd.DataFrame, accounts: pd.DataFrame,
-                   high_risk: list[str], as_of: pd.Timestamp) -> pd.DataFrame:
+                   high_risk: list[str], as_of: pd.Timestamp, graph: pd.DataFrame | None = None) -> pd.DataFrame:
     """One behavioural profile row per customer (pure function, unit tested)."""
     tx = tx.merge(preds[["transaction_id", "fraud_probability", "anomaly_score", "risk_band"]], on="transaction_id", how="left")
     acc_country = accounts.set_index("account_id")["country"]
@@ -80,6 +80,18 @@ def build_profiles(tx: pd.DataFrame, preds: pd.DataFrame, customers: pd.DataFram
     p["relationship_days"] = (as_of - pd.to_datetime(c["onboarding_date"])).dt.days
     p["home_country_high_risk"] = c["country"].isin(high_risk)
     p["n_accounts"] = accounts.groupby("customer_id").size()
+
+    # Phase 2: graph findings (per account -> per customer)
+    if graph is not None and not graph.empty:
+        gg = graph.groupby("customer_id")
+        p["graph_cycle_count"] = gg["cycle_count"].sum()
+        p["graph_chain_count"] = gg["chain_count"].sum()
+        p["network_risk_score"] = gg["network_risk_score"].max()
+        p["neighbour_high_risk_share"] = gg["neighbour_high_risk_share"].max()
+        p["pagerank_percentile"] = gg["pagerank_percentile"].max()
+        p["betweenness"] = gg["betweenness"].max()
+        p[["graph_cycle_count", "graph_chain_count"]] = p[["graph_cycle_count", "graph_chain_count"]].fillna(0).astype(int)
+        p["network_risk_score"] = p["network_risk_score"].fillna(0)
 
     counts = ["tx_out_count", "tx_in_count", "new_counterparties_30d", "near_threshold_count", "high_risk_tx_count",
               "medium_risk_tx_count", "n_accounts", "active_days", "distinct_counterparties"]
@@ -137,7 +149,11 @@ def run_customer_risk(engine: Engine) -> dict:
     customers = pd.read_sql(text("SELECT customer_id, country, onboarding_date, pep_flag FROM customers"), engine)
     accounts = load_accounts(engine)
     as_of = tx["timestamp"].max()
-    profiles = build_profiles(tx, preds, customers, accounts, cfg["high_risk_countries"], as_of)
+    graph = pd.read_sql(text(
+        "SELECT g.customer_id, g.cycle_count, g.chain_count, g.neighbour_high_risk_share, g.pagerank_percentile, "
+        "g.betweenness, COALESCE(n.risk_score, 0) AS network_risk_score "
+        "FROM account_graph_metrics g LEFT JOIN suspicious_networks n ON n.id = g.network_id"), engine)
+    profiles = build_profiles(tx, preds, customers, accounts, cfg["high_risk_countries"], as_of, graph)
 
     rows = []
     for cid, r in profiles.iterrows():
