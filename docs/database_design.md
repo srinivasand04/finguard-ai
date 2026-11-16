@@ -1,4 +1,4 @@
-# Database Design (Phases 1-2)
+# Database Design (Phases 1-4)
 
 PostgreSQL 16 is the source of truth. Tables are defined in `backend/app/models.py` and created with `python -m app.cli init-db`.
 
@@ -40,4 +40,15 @@ Design choices
 
 **Qdrant** holds one 384-d cosine vector per chunk (all-MiniLM-L6-v2) with payload `document_id, title, doc_type, section, page`. Postgres stays the source of truth for chunk text; BM25 is built in memory from it.
 
-Tables planned for Phase 3: `investigations`, `investigation_evidence`, `investigation_reports`, `approvals`, `agent_execution_logs`.
+## Phase 3-4 tables
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `users` | `id`, `username` (unique), `full_name`, `role`, `password_hash` (PBKDF2), `is_active`, `last_login_at` | Six roles; deactivation takes effect immediately |
+| `investigations` | `id`, `case_ref`, `customer_id` FK, `request_text`, `status`, `assessment_score`, `recommendation`, `created_by`, `run_count`, `state` JSON, `error` | One case; `state` holds the final shared agent state of the latest run |
+| `investigation_evidence` | `id`, `investigation_id` FK, `run_id`, `evidence_ref` (E1…), `evidence_type`, `source_agent`, `source_table`, `source_id`, `title`, `details` JSON, `ai_generated`, `observed_at` | Every fact in a report points here, and from here to the source row |
+| `investigation_reports` | `id`, `investigation_id` FK, `run_id`, `version`, `content` JSON (10 sections), `content_markdown`, `narrative_source` | Versioned; `narrative_source` = `llm:<model>` or `template` |
+| `approvals` | `id`, `investigation_id` FK, `report_id` FK, `requested_by`, `decision` (PENDING / APPROVE / ESCALATE / REJECT / REQUEST_MORE_INFO), `decided_by`, `decision_comment`, `overrides_ai` | Human-in-the-loop record, incl. AI-override tracking |
+| `agent_execution_logs` | `id`, `investigation_id` FK, `run_id`, `step`, `agent`, `status`, `attempts`, `tool_calls` JSON, `output_summary` JSON, `evidence_refs`, `llm_model`, `error`, `duration_ms` | Agent execution history / trace |
+
+All 20 tables are created by `python -m app.cli init-db` (non-destructive: only missing tables are added).

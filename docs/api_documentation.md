@@ -1,6 +1,6 @@
-# API (Phases 1-2)
+# API (Phases 1-4)
 
-Interactive OpenAPI docs: http://localhost:8000/docs. All list endpoints return `{items, total, page, size}`; `size` ≤ 200.
+Interactive OpenAPI docs: http://localhost:8000/docs (click *Authorize*). Every endpoint except `/health` and `/metrics` requires a bearer token from `POST /api/v1/auth/login`; the required permission is listed per group below (see [security.md](security.md)). All list endpoints return `{items, total, page, size}`; `size` ≤ 200.
 
 ## Phase 1 - transaction intelligence and detection
 
@@ -49,6 +49,30 @@ Interactive OpenAPI docs: http://localhost:8000/docs. All list endpoints return 
 | GET | `/api/v1/compliance/search` | `q`, `mode` (hybrid / dense / bm25), `rerank`, `doc_type`, `k` |
 | POST | `/api/v1/compliance/ask` | `{question, k, mode, rerank, provider, doc_type}` -> answer, verified citations, sources (audit-logged) |
 | GET | `/api/v1/compliance/evaluation` | Latest retrieval and answer evaluation |
+
+## Phase 3 - investigations (multi-agent) and approvals
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| POST | `/api/v1/investigations` | run_investigation | `{request_text, customer_id?}` → opens a case and runs the 8 agents in the background (202) |
+| POST | `/api/v1/investigations/{id}/run` | run_investigation | Re-run (CREATED / REPORT_READY / FAILED / MORE_INFO_REQUESTED only) |
+| GET | `/api/v1/investigations` | view_investigations | List (`status`, `customer_id`) |
+| GET | `/api/v1/investigations/{id}` | view_investigations | Case + agent steps + evidence + latest report + approvals (poll while RUNNING) |
+| POST | `/api/v1/investigations/{id}/submit` | submit_for_approval | Queue the report for a human decision |
+| POST | `/api/v1/investigations/{id}/decision` | decide_investigation | `{decision: APPROVE / ESCALATE / REJECT / REQUEST_MORE_INFO, comment}`; four-eyes enforced |
+| GET | `/api/v1/approvals` | view_investigations | Approval queue / decision history (`decision`) |
+
+## Phase 4 - identity, governance, observability
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | public | Form `username`, `password` → `{access_token, user, permissions}` |
+| GET | `/api/v1/auth/me` | any user | Current user + permissions |
+| GET / POST | `/api/v1/users` | manage_users | List / create users |
+| PATCH | `/api/v1/users/{username}` | manage_users | Change role, activate / deactivate |
+| GET | `/api/v1/governance/agent-runs` | view_audit | Per-agent success rate, latency, retries; recent steps |
+| GET | `/api/v1/governance/ai-metrics` | view_audit | Outcomes, human-override rate, LLM narrative share, tool usage, model/graph/RAG/agent evaluations |
+| GET | `/metrics` | public (internal) | Prometheus metrics |
 
 Alert types: `HIGH_RISK_TRANSACTION`, `ANOMALOUS_TRANSACTION`, `POSSIBLE_STRUCTURING`, `HIGH_RISK_CUSTOMER` (Phase 1) and `CIRCULAR_FLOW`, `LAYERING_CHAIN`, `SUSPICIOUS_NETWORK` (Phase 2, source `GRAPH`).
 

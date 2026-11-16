@@ -2,11 +2,11 @@
 
 **A hands-on learning project: building an intelligent financial-crime investigation platform, one type of intelligent system at a time.**
 
-FinGuard AI helps (simulated) bank analysts find suspicious money movement, understand customer risk, trace money through networks of accounts, and ask cited questions of AML/KYC policy - and, in later phases, investigate cases with collaborating AI agents. Each phase adds a different family of intelligent system on top of the last, so the repository doubles as a worked example of how they fit together in one production-style application.
+FinGuard AI helps (simulated) bank analysts find suspicious money movement, understand customer risk, trace money through networks of accounts, ask cited questions of AML/KYC policy, and run evidence-backed investigations with eight collaborating AI agents - with a human making every decision. Each phase adds a different family of intelligent system on top of the last, so the repository doubles as a worked example of how they fit together in one production-style application.
 
 > All data is synthetic. Scores, risk bands and alerts are **investigative indicators for human review - never determinations of fraud**.
 
-![Phase](https://img.shields.io/badge/phase-2%20of%204%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-58%20passing-16a34a)
+![Phase](https://img.shields.io/badge/all%204%20phases%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-73%20passing-16a34a)
 
 ## Intelligent system types covered
 
@@ -19,9 +19,9 @@ FinGuard AI helps (simulated) bank analysts find suspicious money movement, unde
 | 5 | **Real-time decisioning** | Scores a new transaction against live history | Shared point-in-time feature pipeline for batch + online | 1 | Done |
 | 6 | **Graph intelligence** | Finds round-tripping, layering chains and mule networks | NetworkX PageRank, betweenness, Louvain communities, time-ordered cycle/chain search, shortest paths | 2 | Done |
 | 7 | **Knowledge system (RAG)** | Answers AML/KYC policy questions with verified citations | PDF/DOCX extraction, section-aware chunking, Sentence Transformers, Qdrant, BM25 + RRF hybrid search, cross-encoder reranking, Claude / OpenAI / local Ollama, labelled evaluation | 2 | Done |
-| 8 | **Multi-agent system** | Specialist agents collaborate on an investigation | LangGraph supervisor, shared state, routing, retries | 3 | Planned |
-| 9 | **Tool-using AI (MCP)** | Agents act only through approved, permissioned tools | Python MCP SDK, validation, audit | 3 | Planned |
-| 10 | **Human-in-the-loop governance** | People approve, reject or escalate - AI never decides alone | Approvals, audit trails, RBAC, observability (Langfuse) | 3-4 | Started (audit log) |
+| 8 | **Multi-agent system** | Eight specialist agents collaborate on an investigation | LangGraph state graph, reducers, conditional routing, retries, case memory, validated LLM narrative | 3 | Done |
+| 9 | **Tool-using AI (MCP)** | Agents and external AI clients act only through 9 permissioned tools | Shared tool registry, Python MCP SDK (FastMCP), Pydantic validation, read-only default, audit | 3 | Done |
+| 10 | **Human-in-the-loop governance** | People approve, reject or escalate - AI never decides alone | JWT + RBAC, four-eyes approvals, override tracking, full audit, Prometheus/Grafana, Langfuse | 3-4 | Done |
 
 ## Architecture
 
@@ -61,12 +61,20 @@ flowchart TB
     DOCS --> CH
     AL --> API[FastAPI + Redis] --> UI[React dashboard]
     LLM --> API
-    subgraph Later["Phases 3-4"]
-        AG[LangGraph agents + MCP tools] --> HR[Human review & approvals]
+    subgraph Inv["Investigation engine - Phase 3"]
+        TR[9 permissioned tools] --> AG[8 LangGraph agents]
+        AG --> EV[Evidence E1..En] --> RP[Cited report]
+        MCP[MCP server] --> TR
     end
-    AL -.-> AG
-    GN -.-> AG
-    LLM -.-> AG
+    subgraph Gov["Governance - Phase 4"]
+        HR[Human review<br/>four-eyes approval]
+        AU[Audit trail, RBAC,<br/>metrics, traces]
+    end
+    AL --> TR
+    GN --> TR
+    HY --> TR
+    RP --> HR
+    HR --> AU
 ```
 
 ## What I learned building Phase 1
@@ -90,6 +98,17 @@ Full write-up: [docs/phase1_report.md](docs/phase1_report.md).
 - **Design for the machine you have.** The whole stack runs locally: Qdrant in Docker, CPU embeddings, and a 4B model in Ollama. Claude or OpenAI can be switched on with an API key.
 
 Full write-up: [docs/phase2_report.md](docs/phase2_report.md).
+
+## What I learned building Phases 3 and 4
+
+- **Give agents tools, not database access.** All eight agents (and any external MCP client) go through one registry of 9 validated, permission-checked, audit-logged tools. That makes every sentence in a report traceable: claim → evidence E# → tool call → database row.
+- **Let rules decide and the LLM write.** The assessment score and recommendation are transparent, cited rules; the LLM only drafts the narrative, which is schema-constrained, citation-checked and rejected if it states guilt. If the LLM is down or slow, a verified template takes over - every case still completes.
+- **Human-in-the-loop has to be structural.** The workflow *stops* at "report ready". Only analysts submit, only managers decide, never on their own case, always with a rationale; disagreeing with the AI is recorded as an override - the data needed to learn from human decisions later.
+- **Failure handling is a feature.** Breaking a tool on purpose shows the agent retrying, failing cleanly, and the report listing what is missing instead of silently omitting it.
+- **Small infrastructure details dominate local AI.** A 2-second IPv6 fallback on `localhost` made the LLM look "unavailable"; a long prompt on a shared CPU needed a leaner prompt and its own timeout. Observability (step timings, LLM latency, fallback reasons) is what made both visible.
+- **Evaluate the workflow, not just the model.** The agent evaluation checks completion, citation coverage and recommendations against ground truth - and its 12/12 result is reported with a warning that the sample was easy.
+
+Full write-up: [docs/phase3_4_report.md](docs/phase3_4_report.md) · security model: [docs/security.md](docs/security.md) · MCP: [docs/mcp.md](docs/mcp.md).
 
 ## What Phase 1 contains
 
@@ -125,6 +144,22 @@ Full write-up: [docs/phase2_report.md](docs/phase2_report.md).
 | Dashboard | Network explorer (Cytoscape.js: ego networks, patterns, networks, shortest path) and Compliance assistant | `frontend/src/pages/Network.tsx`, `Compliance.tsx` |
 | CI | GitHub Actions: 58 backend tests + frontend build on every push | `.github/workflows/ci.yml` |
 
+## What Phases 3 and 4 add
+
+| Area | What is built | Where |
+|---|---|---|
+| Agents | Supervisor, Transaction, Fraud detection, Customer risk, Graph intelligence, Compliance, Investigation, Reporting - a LangGraph state graph with conditional routing, retries and case memory | `backend/agents/` |
+| Tools | 9 permissioned, validated, audited tools shared by agents and MCP | `backend/tools/registry.py` |
+| MCP server | FastMCP over stdio, service identity, read-only by default, no decide tool | `backend/mcp_server/server.py`, `docs/mcp.md` |
+| Cases & evidence | Investigations, evidence (E#), versioned 10-section reports, approvals, agent execution logs | `backend/app/services/cases.py`, `backend/agents/report.py` |
+| Security | JWT login, 6 roles / 11 permissions, four-eyes, PII masking, audit of logins / views / tool calls / decisions | `backend/app/security.py`, `docs/security.md` |
+| Observability | Prometheus `/metrics`, Grafana dashboard, optional Langfuse traces, governance page | `backend/app/observability.py`, `infrastructure/monitoring/` |
+| Evaluation | Agent workflow vs ground truth (`app.cli agent-eval`) | `backend/agents/evaluation.py` |
+| Frontend | Login, investigations + workspace, audit & governance, users & roles, role-filtered menu | `frontend/src/pages/` |
+| CI | Tests + frontend build + Docker image builds | `.github/workflows/ci.yml` |
+
+**Step-by-step commands for everything: [docs/RUNBOOK.md](docs/RUNBOOK.md).**
+
 ## Quick start (Windows / macOS / Linux)
 
 Prerequisites: Docker Desktop, Python 3.12, Node 20+.
@@ -137,8 +172,8 @@ docker compose up -d postgres redis qdrant   # Postgres :55432, Redis :6380, Qdr
 ```bash
 cd backend
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt     # macOS/Linux: .venv/bin/pip
-.venv/Scripts/python -m app.cli all               # data, ML, graph, risk, alerts, RAG index (~10 min; downloads 2 small models)
+.venv/Scripts/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt   # macOS/Linux: .venv/bin/pip
+.venv/Scripts/python -m app.cli all               # data, ML, graph, risk, alerts, RAG index, demo users (~10 min)
 .venv/Scripts/python -m uvicorn app.main:app --port 8000
 ```
 
@@ -148,8 +183,8 @@ npm install
 npm run dev                                   # http://localhost:5173  (proxies /api to :8000)
 ```
 
-- Dashboard: http://localhost:5173
-- API docs (Swagger): http://localhost:8000/docs
+- Dashboard: http://localhost:5173 - sign in with a demo account (e.g. `analyst.fraud`, `manager.investigations`; password = `DEMO_USER_PASSWORD` in `.env`)
+- API docs (Swagger): http://localhost:8000/docs - click *Authorize* to log in
 
 Ports 5432/5433 are often used by a local Postgres install, so the container is published on **55432**. Change `POSTGRES_HOST_PORT` / `DATABASE_URL` in `.env` if needed.
 
@@ -187,7 +222,7 @@ cd backend
 .venv/Scripts/python -m pytest -q
 ```
 
-The test suite (58 tests) generates a small dataset, runs the **whole pipeline** - ML, graph and RAG - into a throwaway SQLite database with an in-process Qdrant and an offline embedder, and calls every API endpoint. No Docker or model downloads needed; the same suite runs in GitHub Actions.
+The test suite (73 tests) generates a small dataset, runs the **whole pipeline** - ML, graph and RAG - into a throwaway SQLite database with an in-process Qdrant and an offline embedder, and calls every API endpoint. No Docker or model downloads needed; the same suite runs in GitHub Actions.
 
 ## Reviewing Phase 1 - suggested checklist
 
@@ -218,5 +253,6 @@ docker-compose.yml  .env.example
 
 - ~~Phase 1~~ - Data, ML detection, customer risk, API, dashboard - **done**
 - ~~Phase 2~~ - Graph intelligence + compliance RAG - **done**
-- **Phase 3** - LangGraph multi-agent investigations, MCP server, evidence & case management, approvals
-- **Phase 4** - Full frontend, auth/RBAC, Langfuse observability, CI/CD, deployment
+- ~~Phase 3~~ - Multi-agent investigations, MCP, evidence & case management - **done**
+- ~~Phase 4~~ - Security, observability, CI, deployment-ready Docker setup - **done**
+- Next ideas: learned case prioritisation from human decisions, borderline-case agent evaluation, cloud deployment, Neo4j / GNN graph features
