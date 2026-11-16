@@ -18,6 +18,11 @@ DEMO_USERS = [
 ]
 
 
+# personal accounts: <OWNER_USERNAME_PREFIX>.<suffix>, one per role
+OWNER_SUFFIX = {"FRAUD_ANALYST": "fraud", "AML_ANALYST": "aml", "COMPLIANCE_OFFICER": "compliance",
+                "INVESTIGATION_MANAGER": "manager", "OPERATIONS_MANAGER": "operations", "ADMIN": "admin"}
+
+
 def create_user(engine: Engine, username: str, role: str, password: str, full_name: str | None = None) -> dict:
     if role not in ROLES:
         raise SystemExit(f"Role must be one of {ROLES}")
@@ -33,14 +38,23 @@ def create_user(engine: Engine, username: str, role: str, password: str, full_na
 
 
 def seed_demo_users(engine: Engine) -> dict:
-    """One demo account per role. The shared password comes from DEMO_USER_PASSWORD (.env) and is never printed."""
-    password = get_settings().demo_user_password
-    if not password:
-        return {"skipped": "set DEMO_USER_PASSWORD in .env to create demo users"}
-    validate_password_strength(password)
+    """One demo account per role (password DEMO_USER_PASSWORD) plus, if OWNER_USERNAME_PREFIX and
+    OWNER_PASSWORD are set in .env, one personal account per role (<prefix>.fraud, <prefix>.manager, ...).
+    Passwords come from .env and are never printed."""
+    st = get_settings()
+    accounts: list[tuple[str, str, str, str]] = []
+    if st.demo_user_password:
+        validate_password_strength(st.demo_user_password)
+        accounts += [(u, n, r, st.demo_user_password) for u, n, r in DEMO_USERS]
+    if st.owner_username_prefix and st.owner_password:
+        validate_password_strength(st.owner_password)
+        accounts += [(f"{st.owner_username_prefix}.{suffix}", f"{st.owner_username_prefix} ({role.replace('_', ' ').title()})",
+                      role, st.owner_password) for role, suffix in OWNER_SUFFIX.items()]
+    if not accounts:
+        return {"skipped": "set DEMO_USER_PASSWORD and/or OWNER_USERNAME_PREFIX + OWNER_PASSWORD in .env"}
     created, existing = [], []
     with Session(engine) as s:
-        for username, name, role in DEMO_USERS:
+        for username, name, role, password in accounts:
             if s.query(User).filter(User.username == username).one_or_none():
                 existing.append(username)
                 continue
@@ -50,4 +64,4 @@ def seed_demo_users(engine: Engine) -> dict:
             s.add(AuditLog(actor="system:cli", action="DEMO_USERS_SEEDED", entity_type="user", entity_id=None,
                            details={"created": created}))
         s.commit()
-    return {"created": created, "already_existed": existing, "password": "DEMO_USER_PASSWORD from .env"}
+    return {"created": created, "already_existed": existing, "passwords": "from .env (DEMO_USER_PASSWORD / OWNER_PASSWORD)"}

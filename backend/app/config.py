@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-change-me"          # override with JWT_SECRET in .env for anything shared
     jwt_expire_minutes: int = 480
     demo_user_password: str = ""                    # used only by `app.cli seed-users`
+    owner_username_prefix: str = ""                 # e.g. "Srinivasan" -> Srinivasan.fraud, Srinivasan.manager, ...
+    owner_password: str = ""                        # password for those personal accounts (local .env only)
 
     # --- Phase 3: agents / MCP ---
     agent_use_llm: bool = True                      # narrative synthesis by LLM; deterministic template otherwise
