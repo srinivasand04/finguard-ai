@@ -16,6 +16,9 @@ COPY data_gen ./data_gen
 COPY config ./config
 COPY graph ./graph
 COPY rag ./rag
+COPY agents ./agents
+COPY tools ./tools
+COPY mcp_server ./mcp_server
 
 ENV MODELS_DIR=/models DATA_DIR=/data
 EXPOSE 8000
