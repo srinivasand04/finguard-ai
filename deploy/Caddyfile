@@ -1,0 +1,19 @@
+# Caddy obtains and renews a Let's Encrypt certificate for {$DOMAIN} automatically.
+{$DOMAIN} {
+	encode gzip
+
+	# never expose Prometheus metrics publicly
+	@metrics path /metrics
+	respond @metrics 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# the frontend container (nginx) serves the app and proxies /api, /docs and /health to the API
+	reverse_proxy frontend:80
+}
