@@ -53,14 +53,53 @@ def pipeline(tmp_path_factory):
     results["alerts"] = generate_alerts(engine)
     results["rag"] = build_index(engine)
     results["engine"] = engine
+    _create_test_users(engine)
     return results
+
+
+# Phase 4: one throwaway test account per role (test-only password, never used outside this suite)
+TEST_PASSWORD = "Test-Only-Passw0rd"
+TEST_USERS = {"FRAUD_ANALYST": "t.fraud", "AML_ANALYST": "t.aml", "COMPLIANCE_OFFICER": "t.compliance",
+              "INVESTIGATION_MANAGER": "t.manager", "OPERATIONS_MANAGER": "t.ops", "ADMIN": "t.admin"}
+
+
+def _create_test_users(engine):
+    from sqlalchemy.orm import Session
+
+    from app.models import User
+    from app.security import hash_password
+
+    with Session(engine) as s:
+        for role, username in TEST_USERS.items():
+            s.add(User(username=username, full_name=f"Test {role}", role=role, password_hash=hash_password(TEST_PASSWORD)))
+        s.commit()
+
+
+def auth_headers(client, role: str) -> dict:
+    r = client.post("/api/v1/auth/login", data={"username": TEST_USERS[role], "password": TEST_PASSWORD})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
 @pytest.fixture(scope="session")
 def client(pipeline):
+    """Default client is logged in as ADMIN, so the Phase 1-2 tests run behind authentication unchanged."""
     from fastapi.testclient import TestClient
 
     from app.main import app
 
     with TestClient(app) as c:
+        c.headers.update(auth_headers(c, "ADMIN"))
         yield c
+
+
+@pytest.fixture(scope="session")
+def as_role(client):
+    """as_role("FRAUD_ANALYST") -> auth headers for that role (cached)."""
+    cache: dict[str, dict] = {}
+
+    def get(role: str) -> dict:
+        if role not in cache:
+            cache[role] = auth_headers(client, role)
+        return cache[role]
+    return get
