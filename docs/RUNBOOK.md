@@ -123,7 +123,9 @@ docker compose exec backend python -m app.cli all
 
 Dashboard on http://localhost:5173 (nginx), API on http://localhost:8000. Ollama on your machine is reached from the container via `host.docker.internal`.
 
-## 9. Deploying to a cloud VM (outline)
+## 9. Deploying to a cloud VM
+
+**Full guide with HTTPS and a one-command deploy script: [DEPLOYMENT.md](DEPLOYMENT.md).** Outline:
 
 1. Create a Linux VM (2 vCPU / 8 GB RAM is enough for the demo) with Docker installed; open only ports 80/443.
 2. `git clone` the repo, create `.env` with a strong `JWT_SECRET`, a real `DEMO_USER_PASSWORD` (or create users with `app.cli create-user`), and an `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (a CPU VM is too slow for a local LLM).

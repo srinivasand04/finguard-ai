@@ -16,3 +16,6 @@ models/**/*.json
 
 # local tool config
 .claude/
+
+# personal portfolio/resume drafts (not for the public repo)
+portfolio/

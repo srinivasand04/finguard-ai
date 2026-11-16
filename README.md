@@ -6,6 +6,8 @@ FinGuard AI helps (simulated) bank analysts find suspicious money movement, unde
 
 > All data is synthetic. Scores, risk bands and alerts are **investigative indicators for human review - never determinations of fraud**.
 
+![FinGuard AI pipeline - detect, understand, investigate, govern](docs/assets/finguard_pipeline.gif)
+
 ![Phase](https://img.shields.io/badge/all%204%20phases%20complete-2563eb) ![Python](https://img.shields.io/badge/python-3.12-3776ab) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![React](https://img.shields.io/badge/React-19-61dafb) ![Tests](https://img.shields.io/badge/tests-73%20passing-16a34a)
 
 ## Intelligent system types covered
@@ -158,7 +160,7 @@ Full write-up: [docs/phase3_4_report.md](docs/phase3_4_report.md) · security mo
 | Frontend | Login, investigations + workspace, audit & governance, users & roles, role-filtered menu | `frontend/src/pages/` |
 | CI | Tests + frontend build + Docker image builds | `.github/workflows/ci.yml` |
 
-**Step-by-step commands for everything: [docs/RUNBOOK.md](docs/RUNBOOK.md).**
+**Step-by-step commands for everything: [docs/RUNBOOK.md](docs/RUNBOOK.md) · public deployment with HTTPS: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).**
 
 ## Quick start (Windows / macOS / Linux)
 
