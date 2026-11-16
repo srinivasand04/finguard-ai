@@ -5,6 +5,7 @@ import type { CustomerDetail, Page, Transaction } from '../api'
 import { fmtInt, fmtMoney, get, pct } from '../api'
 import { Badge, Disclaimer, ErrorBox, Loading, Pager, Section, Stat, TxTable } from '../components/ui'
 import { useFetch } from '../hooks'
+import { useAuth } from '../auth'
 
 type Counterparty = { customer_id: string; name: string | null; risk_level: string | null; out_count: number; out_total: number; in_count: number; in_total: number }
 type Velocity = {
@@ -37,6 +38,7 @@ const PROFILE_LABELS: [string, string, (v: number) => string][] = [
 
 export default function CustomerPage() {
   const { id } = useParams()
+  const { can } = useAuth()
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState('risk_desc')
   const [account, setAccount] = useState<string | null>(null)
@@ -61,6 +63,7 @@ export default function CustomerPage() {
           <Badge value={d.risk_level} />
           {d.pep_flag && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">PEP</span>}
           <Link to={`/network?customer_id=${d.customer_id}`} className="text-sm text-blue-600 hover:underline">View money-flow network →</Link>
+          {can('run_investigation') && <Link to={`/investigations?customer_id=${d.customer_id}`} className="btn ml-auto">Start investigation</Link>}
         </div>
         <p className="text-sm text-slate-500">{d.segment} · {d.occupation} · {d.country} · KYC {d.kyc_level} · customer since {d.onboarding_date}</p>
       </div>

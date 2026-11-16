@@ -90,7 +90,23 @@ export class ApiError extends Error {
   }
 }
 
+// --- auth token (sessionStorage: cleared when the browser tab closes; dev convenience, see docs/security.md)
+const TOKEN_KEY = 'fg_token'
+export const getToken = (): string | null => { try { return sessionStorage.getItem(TOKEN_KEY) } catch { return null } }
+export const setToken = (t: string | null) => {
+  try { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY) } catch { /* storage blocked */ }
+}
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const t = getToken()
+  return t ? { ...extra, Authorization: `Bearer ${t}` } : extra
+}
+
 async function handle<T>(r: Response): Promise<T> {
+  if (r.status === 401 && getToken()) {          // expired / revoked session -> back to login
+    setToken(null)
+    if (!location.pathname.startsWith('/login')) location.assign(`/login?next=${encodeURIComponent(location.pathname)}`)
+  }
   if (!r.ok) {
     let msg = r.statusText
     try {
@@ -108,13 +124,29 @@ export function get<T>(path: string, params: Record<string, string | number | bo
   const qs = new URLSearchParams()
   Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, String(v)) })
   const q = qs.toString()
-  return fetch(`${path}${q ? `?${q}` : ''}`).then(r => handle<T>(r))
+  return fetch(`${path}${q ? `?${q}` : ''}`, { headers: authHeaders() }).then(r => handle<T>(r))
 }
 
 export function post<T>(path: string, body: unknown): Promise<T> {
-  return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  return fetch(path, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
     .then(r => handle<T>(r))
 }
+
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return fetch(path, { method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+    .then(r => handle<T>(r))
+}
+
+export async function login(username: string, password: string): Promise<Session> {
+  const r = await fetch('/api/v1/auth/login', { method: 'POST', body: new URLSearchParams({ username, password }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+  const out = await handle<Session & { access_token: string }>(r)
+  setToken(out.access_token)
+  return { user: out.user, permissions: out.permissions }
+}
+
+export interface User { id: number; username: string; full_name: string; role: string; is_active: boolean; created_at: string; last_login_at: string | null }
+export interface Session { user: User; permissions: string[] }
 
 export const fmtMoney = (v: number, digits = 2) =>
   new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: digits, minimumFractionDigits: digits }).format(v)

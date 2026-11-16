@@ -4,6 +4,7 @@ import type { Alert, CustomerSummary, Page, Summary } from '../api'
 import { fmtCompact, fmtInt, fmtMoney, get } from '../api'
 import { Badge, Disclaimer, ErrorBox, Loading, Section, Stat } from '../components/ui'
 import { useFetch } from '../hooks'
+import { useAuth } from '../auth'
 
 type Day = { date: string; count: number; volume: number; high: number; medium: number }
 type Bucket = { bucket: string; transactions: number; customers: number }
@@ -11,11 +12,13 @@ type Bucket = { bucket: string; transactions: number; customers: number }
 const axis = { fontSize: 11, fill: '#64748b' }
 
 export default function Dashboard() {
+  const { can } = useAuth()
+  const detail = can('view_customers')
   const s = useFetch(() => get<Summary>('/api/v1/dashboard/summary'), [])
   const ts = useFetch(() => get<Day[]>('/api/v1/dashboard/timeseries'), [])
   const dist = useFetch(() => get<Bucket[]>('/api/v1/dashboard/risk-distribution'), [])
-  const top = useFetch(() => get<Page<CustomerSummary>>('/api/v1/customers', { risk_level: 'HIGH', size: 8 }), [])
-  const alerts = useFetch(() => get<Page<Alert>>('/api/v1/alerts', { size: 8 }), [])
+  const top = useFetch(() => detail ? get<Page<CustomerSummary>>('/api/v1/customers', { risk_level: 'HIGH', size: 8 }) : Promise.resolve(null), [detail])
+  const alerts = useFetch(() => detail ? get<Page<Alert>>('/api/v1/alerts', { size: 8 }) : Promise.resolve(null), [detail])
 
   if (s.error) return <ErrorBox error={`Could not reach the API: ${s.error}. Is the backend running on port 8000?`} />
   if (!s.data) return <Loading />
@@ -105,7 +108,7 @@ export default function Dashboard() {
         </Section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      {detail && <div className="grid gap-4 xl:grid-cols-2">
         <Section title="Highest-risk customers" right={<Link className="text-xs text-blue-600" to="/customers?risk_level=HIGH">View all</Link>}>
           <table className="tbl w-full">
             <thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th className="text-right!">Score</th><th>Level</th></tr></thead>
@@ -128,7 +131,7 @@ export default function Dashboard() {
               </tr>))}</tbody>
           </table>
         </Section>
-      </div>
+      </div>}
 
       <Section title="Volume by category">
         <div className="overflow-x-auto">
