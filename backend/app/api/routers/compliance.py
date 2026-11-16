@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_session
 from app.models import AuditLog, ComplianceChunk, ComplianceDocument
+from app.security import ActorDep
 
 router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -82,13 +83,13 @@ def search(session: SessionDep, q: str = Query(min_length=2, max_length=500), k:
 
 
 @router.post("/ask", summary="Answer a compliance question with citations")
-def ask(req: AskRequest, session: SessionDep):
+def ask(req: AskRequest, session: SessionDep, actor: ActorDep):
     from rag.answer import answer_question
 
     r = _retriever(session)
     out = answer_question(r, req.question, k=req.k, mode=req.mode, rerank=req.rerank, provider=req.provider,
                           doc_type=req.doc_type)
-    session.add(AuditLog(actor="api:anonymous", action="COMPLIANCE_QUESTION", entity_type="rag",
+    session.add(AuditLog(actor=actor.username, action="COMPLIANCE_QUESTION", entity_type="rag",
                          entity_id=out["provider"],
                          details={"question": out["question"], "answer_type": out["answer_type"], "cited": out["cited"],
                                   "sources": [s["chunk_id"] for s in out["sources"]], "warnings": out["warnings"],

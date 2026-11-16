@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.routers.transactions import list_transactions
 from app.db import get_session
-from app.models import Alert, Customer, CustomerRisk, Transaction
+from app.models import Alert, AuditLog, Customer, CustomerRisk, Transaction
+from app.security import ActorDep, mask_date
 from app.schemas import (AccountOut, CustomerDetail, CustomerRiskOut, CustomerSummary, Page, TransactionOut)
 
 router = APIRouter(prefix="/api/v1/customers", tags=["customers"])
@@ -48,16 +49,21 @@ def search(session: SessionDep,
 
 
 @router.get("/{customer_id}", response_model=CustomerDetail, summary="Customer profile with accounts and risk")
-def get_customer(customer_id: str, session: SessionDep):
+def get_customer(customer_id: str, session: SessionDep, actor: ActorDep):
     c = session.scalar(select(Customer).options(selectinload(Customer.accounts), selectinload(Customer.risk))
                        .where(Customer.customer_id == customer_id))
     if not c:
         raise HTTPException(404, f"Customer {customer_id} not found")
     alerts = session.scalar(select(func.count()).select_from(Alert).where(Alert.customer_id == customer_id)) or 0
+    # evidence-access history: who looked at which customer, when
+    session.add(AuditLog(actor=actor.username, action="CUSTOMER_PROFILE_VIEWED", entity_type="customer",
+                         entity_id=customer_id, details={"role": actor.role}))
+    session.commit()
     return CustomerDetail(
         customer_id=c.customer_id, full_name=c.full_name, segment=c.segment, country=c.country,
         kyc_level=c.kyc_level, pep_flag=c.pep_flag, onboarding_date=c.onboarding_date,
-        occupation=c.occupation, date_of_birth=c.date_of_birth,
+        occupation=c.occupation,
+        date_of_birth=c.date_of_birth if actor.can("view_pii") else mask_date(c.date_of_birth),
         accounts=[AccountOut.model_validate(a) for a in c.accounts],
         risk=risk_out(c.risk) if c.risk else None,
         risk_score=c.risk.risk_score if c.risk else None, risk_level=c.risk.risk_level if c.risk else None,

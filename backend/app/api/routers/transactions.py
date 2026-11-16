@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, aliased
 from app.db import get_session
 from app.models import AuditLog, Customer, FraudPrediction, Transaction
 from app.schemas import Page, PredictionOut, ScoreRequest, ScoreResponse, TransactionDetail, TransactionOut
+from app.security import Actor, require
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -103,7 +104,7 @@ def get_transaction(transaction_id: int, session: SessionDep):
 
 
 @router.post("/score", response_model=ScoreResponse, summary="Near-real-time scoring of a new transaction (not stored)")
-def score(req: ScoreRequest, session: SessionDep):
+def score(req: ScoreRequest, session: SessionDep, actor: Annotated[Actor, Depends(require("score_transaction"))]):
     from ml.scoring import score_single
 
     if req.sender_account_id == req.receiver_account_id:
@@ -114,7 +115,7 @@ def score(req: ScoreRequest, session: SessionDep):
         raise HTTPException(404, str(e.args[0])) from e
     except RuntimeError as e:
         raise HTTPException(503, str(e)) from e
-    session.add(AuditLog(actor="api:anonymous", action="TRANSACTION_SCORED", entity_type="account",
+    session.add(AuditLog(actor=actor.username, action="TRANSACTION_SCORED", entity_type="account",
                          entity_id=req.sender_account_id,
                          details={"request": req.model_dump(mode="json"), "risk_score": result["risk_score"],
                                   "model_version_id": result["model_version_id"]}))

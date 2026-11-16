@@ -4,7 +4,9 @@ Phase 1: customers, accounts, transactions, fraud_predictions, customer_risk,
          alerts, model_versions, audit_logs.
 Phase 2: graph_edges, account_graph_metrics, graph_patterns, suspicious_networks
          (graph intelligence); compliance_documents, compliance_chunks (RAG).
-Investigation/evidence/report/approval tables arrive in Phase 3.
+Phase 3: investigations, investigation_evidence, investigation_reports, approvals,
+         agent_execution_logs (multi-agent case management).
+Phase 4: users (authentication + role-based access).
 """
 from datetime import date, datetime
 
@@ -248,3 +250,100 @@ class ComplianceChunk(Base):
     page: Mapped[int | None] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
     char_count: Mapped[int] = mapped_column(Integer)
+
+
+# --------------------------------------------------------------------------- Phase 4: identity & access
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(120))
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+# --------------------------------------------------------------------------- Phase 3: investigations & evidence
+class Investigation(Base):
+    __tablename__ = "investigations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_ref: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.customer_id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    request_text: Mapped[str] = mapped_column(Text)
+    # CREATED -> RUNNING -> REPORT_READY -> PENDING_APPROVAL -> APPROVED_CLOSED / ESCALATED / REJECTED /
+    # MORE_INFO_REQUESTED (and FAILED if the workflow could not run)
+    status: Mapped[str] = mapped_column(String(30), index=True, default="CREATED")
+    assessment_score: Mapped[float | None] = mapped_column(Float)
+    recommendation: Mapped[str | None] = mapped_column(String(40))
+    created_by: Mapped[str] = mapped_column(String(60))
+    run_count: Mapped[int] = mapped_column(Integer, default=0)
+    state: Mapped[dict] = mapped_column(JSON, default=dict)   # final shared workflow state (findings per agent)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class InvestigationEvidence(Base):
+    __tablename__ = "investigation_evidence"
+    id: Mapped[int] = mapped_column(BigID, primary_key=True, autoincrement=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(40), index=True)
+    evidence_ref: Mapped[str] = mapped_column(String(10))       # E1, E2, ... referenced by findings and reports
+    evidence_type: Mapped[str] = mapped_column(String(30))      # TRANSACTION / ML_PREDICTION / RISK_INDICATOR / ...
+    source_agent: Mapped[str] = mapped_column(String(40))
+    source_table: Mapped[str | None] = mapped_column(String(40))
+    source_id: Mapped[str | None] = mapped_column(String(60))
+    title: Mapped[str] = mapped_column(String(300))
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime)  # when the underlying event happened
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class InvestigationReport(Base):
+    __tablename__ = "investigation_reports"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(40))
+    version: Mapped[int] = mapped_column(Integer)
+    content: Mapped[dict] = mapped_column(JSON)
+    content_markdown: Mapped[str] = mapped_column(Text)
+    narrative_source: Mapped[str] = mapped_column(String(60))  # llm:<model> or template
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Approval(Base):
+    __tablename__ = "approvals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True)
+    report_id: Mapped[int | None] = mapped_column(ForeignKey("investigation_reports.id"))
+    requested_by: Mapped[str] = mapped_column(String(60))
+    request_comment: Mapped[str | None] = mapped_column(Text)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    decision: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    # APPROVE / REJECT / REQUEST_MORE_INFO / ESCALATE
+    decided_by: Mapped[str | None] = mapped_column(String(60))
+    decision_comment: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    overrides_ai: Mapped[bool | None] = mapped_column(Boolean)   # human decision differs from AI recommendation
+
+
+class AgentExecutionLog(Base):
+    __tablename__ = "agent_execution_logs"
+    id: Mapped[int] = mapped_column(BigID, primary_key=True, autoincrement=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(40), index=True)
+    step: Mapped[int] = mapped_column(Integer)
+    agent: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(15))            # SUCCEEDED / FAILED / SKIPPED
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+    tool_calls: Mapped[list] = mapped_column(JSON, default=list)
+    output_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence_refs: Mapped[list] = mapped_column(JSON, default=list)
+    llm_model: Mapped[str | None] = mapped_column(String(60))
+    error: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    duration_ms: Mapped[int] = mapped_column(Integer)

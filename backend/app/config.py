@@ -30,12 +30,30 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5-5"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = "http://127.0.0.1:11434"      # 127.0.0.1, not localhost: on Windows localhost tries IPv6 first
     ollama_model: str = "qwen3:4b"
     ollama_num_ctx: int = 4096      # 5 passages + question fit in ~1.5k tokens; smaller context = less RAM
     llm_max_tokens: int = 300       # answers are capped at ~6 sentences anyway; bounds latency on CPU
     llm_timeout_seconds: float = 120.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    # --- Phase 4: security ---
+    jwt_secret: str = "dev-only-change-me"          # override with JWT_SECRET in .env for anything shared
+    jwt_expire_minutes: int = 480
+    demo_user_password: str = ""                    # used only by `app.cli seed-users`
+
+    # --- Phase 3: agents / MCP ---
+    agent_use_llm: bool = True                      # narrative synthesis by LLM; deterministic template otherwise
+    agent_max_retries: int = 2
+    agent_llm_timeout_seconds: float = 240.0       # narrative prompts are long; local CPU models need time
+    mcp_actor_username: str = "mcp-service"         # identity the MCP server acts as
+    mcp_actor_role: str = "FRAUD_ANALYST"
+    mcp_read_only: bool = True                      # MCP write tools are disabled unless explicitly enabled
+
+    # --- Phase 4: observability (Langfuse is optional - enabled only when keys are set) ---
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
 
 @lru_cache

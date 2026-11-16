@@ -64,7 +64,7 @@ class CustomerRiskOut(BaseModel):
 
 class CustomerDetail(CustomerSummary):
     occupation: str | None
-    date_of_birth: date | None
+    date_of_birth: date | str | None   # masked to "YYYY-**-**" for roles without view_pii
     accounts: list[AccountOut]
     risk: CustomerRiskOut | None = None
     alert_count: int = 0

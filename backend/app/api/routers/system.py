@@ -2,6 +2,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.security import require
 from sqlalchemy import Integer, case, cast, func, select, text
 from sqlalchemy.orm import Session
 
@@ -52,12 +54,12 @@ def _summary(session: Session) -> dict:
     }
 
 
-@router.get("/api/v1/dashboard/summary", summary="Headline monitoring metrics (cached in Redis)")
+@router.get("/api/v1/dashboard/summary", dependencies=[Depends(require("view_monitoring"))], summary="Headline monitoring metrics (cached in Redis)")
 def summary(session: SessionDep):
     return cache.cached("dashboard:summary", lambda: _summary(session))
 
 
-@router.get("/api/v1/dashboard/timeseries", summary="Daily volume and flagged activity")
+@router.get("/api/v1/dashboard/timeseries", dependencies=[Depends(require("view_monitoring"))], summary="Daily volume and flagged activity")
 def timeseries(session: SessionDep):
     def produce():
         day = func.date(Transaction.timestamp)
@@ -71,7 +73,7 @@ def timeseries(session: SessionDep):
     return cache.cached("dashboard:timeseries", produce)
 
 
-@router.get("/api/v1/dashboard/risk-distribution", summary="Histogram of transaction and customer risk scores")
+@router.get("/api/v1/dashboard/risk-distribution", dependencies=[Depends(require("view_monitoring"))], summary="Histogram of transaction and customer risk scores")
 def risk_distribution(session: SessionDep):
     def produce():
         def hist(col):
@@ -84,7 +86,7 @@ def risk_distribution(session: SessionDep):
     return cache.cached("dashboard:risk_distribution", produce)
 
 
-@router.get("/api/v1/models", response_model=list[ModelVersionOut], tags=["models"])
+@router.get("/api/v1/models", response_model=list[ModelVersionOut], tags=["models"], dependencies=[Depends(require("view_monitoring"))])
 def models(session: SessionDep, active_only: bool = False):
     q = select(ModelVersion).order_by(ModelVersion.created_at.desc(), ModelVersion.id.desc())
     if active_only:
@@ -92,7 +94,7 @@ def models(session: SessionDep, active_only: bool = False):
     return session.scalars(q).all()
 
 
-@router.get("/api/v1/models/{model_id}", response_model=ModelVersionOut, tags=["models"])
+@router.get("/api/v1/models/{model_id}", response_model=ModelVersionOut, tags=["models"], dependencies=[Depends(require("view_monitoring"))])
 def model(model_id: int, session: SessionDep):
     m = session.get(ModelVersion, model_id)
     if not m:
@@ -100,12 +102,14 @@ def model(model_id: int, session: SessionDep):
     return m
 
 
-@router.get("/api/v1/audit-logs", response_model=Page[AuditLogOut], tags=["governance"])
-def audit_logs(session: SessionDep, action: str | None = None,
+@router.get("/api/v1/audit-logs", response_model=Page[AuditLogOut], tags=["governance"], dependencies=[Depends(require("view_audit"))])
+def audit_logs(session: SessionDep, action: str | None = None, actor: str | None = None,
                page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200)):
     q = select(AuditLog)
     if action:
         q = q.where(AuditLog.action == action)
+    if actor:
+        q = q.where(AuditLog.actor == actor)
     total = session.scalar(select(func.count()).select_from(q.subquery())) or 0
     rows = session.scalars(q.order_by(AuditLog.id.desc()).offset((page - 1) * size).limit(size)).all()
     return Page(items=rows, total=total, page=page, size=size)
