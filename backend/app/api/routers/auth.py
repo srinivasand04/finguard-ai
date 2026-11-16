@@ -1,15 +1,19 @@
 """Login, current user, and user management (ADMIN)."""
 from __future__ import annotations
 
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_session
 from app.models import AuditLog, User
 from app.security import (ROLES, Actor, ActorDep, create_token, hash_password, permissions_for, require,
@@ -26,12 +30,39 @@ def _user_out(u: User) -> dict:
             "created_at": u.created_at, "last_login_at": u.last_login_at}
 
 
+# Brute-force protection: failed logins per (username, client IP) inside a sliding window.
+# In-memory, so it resets on restart and is per process - enough for a single-instance deployment.
+_FAILURES: dict[tuple[str, str], deque] = defaultdict(deque)
+_LOCK = threading.Lock()
+
+
+def _recent_failures(key: tuple[str, str]) -> deque:
+    window = get_settings().login_lockout_minutes * 60
+    q = _FAILURES[key]
+    while q and time.time() - q[0] > window:
+        q.popleft()
+    return q
+
+
 @router.post("/auth/login", summary="Exchange username + password for a bearer token")
-def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep):
+def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep, request: Request):
+    s = get_settings()
+    key = (form.username.lower()[:60], request.client.host if request.client else "?")
+    with _LOCK:
+        if len(_recent_failures(key)) >= s.login_max_failures:
+            session.add(AuditLog(actor=form.username[:80], action="LOGIN_BLOCKED", entity_type="user",
+                                 entity_id=form.username[:60], details={"ip": key[1]}))
+            session.commit()
+            raise HTTPException(429, f"Too many failed logins - try again in {s.login_lockout_minutes} minutes")
     user = session.scalar(select(User).where(User.username == form.username))
     ok = user is not None and user.is_active and verify_password(form.password, user.password_hash)
     session.add(AuditLog(actor=form.username[:80], action="LOGIN_SUCCEEDED" if ok else "LOGIN_FAILED",
-                         entity_type="user", entity_id=form.username[:60], details={}))
+                         entity_type="user", entity_id=form.username[:60], details={"ip": key[1]}))
+    with _LOCK:
+        if ok:
+            _FAILURES.pop(key, None)
+        else:
+            _recent_failures(key).append(time.time())
     if not ok:
         session.commit()
         raise HTTPException(401, "Invalid username or password")

@@ -8,6 +8,8 @@ from app.config import get_settings
 from app.models import AuditLog, User
 from app.security import ROLES, hash_password, validate_password_strength
 
+PUBLIC_DEMO_PASSWORD = "FinGuard-Demo-2026"   # the value shown in .env.example (public on GitHub)
+
 # one demo account per role; the username says what the account can do
 DEMO_USERS = [
     ("fraud_analyst", "Fraud Analyst", "FRAUD_ANALYST"),
@@ -43,6 +45,8 @@ def seed_demo_users(engine: Engine, reset_passwords: bool = False) -> dict:
     if not password:
         return {"skipped": "set DEMO_USER_PASSWORD in .env to create demo users"}
     validate_password_strength(password)
+    if get_settings().environment == "production" and password == PUBLIC_DEMO_PASSWORD:
+        raise SystemExit("DEMO_USER_PASSWORD is the public example value - choose a private one for production")
     created, updated, existing = [], [], []
     with Session(engine) as s:
         for username, name, role in DEMO_USERS:

@@ -28,8 +28,12 @@ token; click *Authorize* above to use it in these docs.
 
 def create_app() -> FastAPI:
     s = get_settings()
-    if s.jwt_secret == "dev-only-change-me":
-        logging.getLogger("finguard").warning("JWT_SECRET is the development default - set a random value in .env")
+    weak_secret = s.jwt_secret == "dev-only-change-me" or len(s.jwt_secret) < 32
+    if s.environment == "production" and weak_secret:
+        # refuse to run publicly with a guessable token-signing key
+        raise RuntimeError("ENVIRONMENT=production requires JWT_SECRET of at least 32 random characters")
+    if weak_secret:
+        logging.getLogger("finguard").warning("JWT_SECRET is weak or the development default - set a random value in .env")
     app = FastAPI(title=s.app_name, version="0.4.0-phase4", description=DESCRIPTION)
     app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_methods=["GET", "POST", "PATCH"],
                        allow_headers=["*"])

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(ROOT_DIR / ".env", BACKEND_DIR / ".env"), extra="ignore")
 
     app_name: str = "FinGuard AI"
+    environment: str = "development"                # "production" turns on strict startup checks
     database_url: str = "postgresql+psycopg://finguard:finguard_dev@localhost:55432/finguard"
     redis_url: str = "redis://localhost:6380/0"
     models_dir: Path = ROOT_DIR / "models"
@@ -40,6 +41,8 @@ class Settings(BaseSettings):
     # --- Phase 4: security ---
     jwt_secret: str = "dev-only-change-me"          # override with JWT_SECRET in .env for anything shared
     jwt_expire_minutes: int = 480
+    login_max_failures: int = 5                     # failed logins per username+IP ...
+    login_lockout_minutes: int = 15                 # ... within this window -> HTTP 429
     demo_user_password: str = ""                    # used only by `app.cli seed-users`
 
     # --- Phase 3: agents / MCP ---

@@ -71,3 +71,31 @@ def test_user_management(client, as_role):
 def test_metrics_endpoint(client):
     body = client.get("/metrics").text
     assert "finguard_http_requests_total" in body and "finguard_tool_calls_total" in body
+
+
+def test_login_rate_limit(client, monkeypatch):
+    from app.api.routers import auth
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "login_max_failures", 3)
+    user = TEST_USERS["AML_ANALYST"]
+    for _ in range(3):
+        assert client.post("/api/v1/auth/login", data={"username": user, "password": "wrong"}).status_code == 401
+    # even the right password is refused while the account+IP is locked out
+    assert client.post("/api/v1/auth/login", data={"username": user, "password": TEST_PASSWORD}).status_code == 429
+    auth._FAILURES.clear()
+    assert client.post("/api/v1/auth/login", data={"username": user, "password": TEST_PASSWORD}).status_code == 200
+
+
+def test_production_requires_strong_jwt_secret(monkeypatch):
+    import pytest
+
+    from app.config import get_settings
+    from app.main import create_app
+
+    monkeypatch.setattr(get_settings(), "environment", "production")
+    monkeypatch.setattr(get_settings(), "jwt_secret", "dev-only-change-me")
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        create_app()
+    monkeypatch.setattr(get_settings(), "jwt_secret", "x" * 48)
+    assert create_app() is not None
