@@ -40,22 +40,22 @@ cd backend
 
 `all` = init-db (drops tables) → generate → ingest → EDA → train → score → graph → risk → alerts → rag-build → seed-users.
 
-**Upgrading an existing Phase 2 database instead** (keeps your data, adds the Phase 3-4 tables and demo users):
+**Upgrading an existing database instead** (keeps your data, adds missing tables and demo users; `--reset-passwords` applies a changed `DEMO_USER_PASSWORD` to existing demo accounts):
 
 ```bash
 .venv/Scripts/python -m app.cli init-db
 .venv/Scripts/python -m app.cli seed-users
 ```
 
-Demo accounts (password = `DEMO_USER_PASSWORD` in `.env`):
+Demo accounts - the username is the role (password = `DEMO_USER_PASSWORD` in `.env`):
 
 | Username | Role | Can do |
 |---|---|---|
-| `analyst.fraud` | Fraud analyst | investigate, submit for approval, score |
-| `analyst.aml` | AML analyst | same as fraud analyst |
-| `compliance.officer` | Compliance officer | view cases and evidence, audit, compliance assistant |
-| `manager.investigations` | Investigation manager | **decide** on cases (approve / escalate / reject / more info) |
-| `manager.operations` | Operations manager | dashboards and aggregates only (no customer data) |
+| `fraud_analyst` | Fraud analyst | investigate, submit for approval, score |
+| `aml_analyst` | AML analyst | same as fraud analyst |
+| `compliance_officer` | Compliance officer | view cases and evidence, audit, compliance assistant |
+| `investigation_manager` | Investigation manager | **decide** on cases (approve / escalate / reject / more info) |
+| `operations_manager` | Operations manager | dashboards and aggregates only (no customer data) |
 | `admin` | Administrator | users & roles, audit, read access (cannot investigate or decide) |
 
 ## 3. Run the app
@@ -76,10 +76,10 @@ Open http://localhost:5173 and sign in. API docs: http://localhost:8000/docs (cl
 
 ## 4. Try the Phase 3 workflow (human in the loop)
 
-1. Sign in as `analyst.fraud` → **Investigations** → type *"Investigate suspicious transactions involving customer CUST11493"* → **Start investigation**. Watch the eight agents complete (≈1-3 min on CPU; the first run loads the search models).
+1. Sign in as `fraud_analyst` → **Investigations** → type *"Investigate suspicious transactions involving customer CUST11493"* → **Start investigation**. Watch the eight agents complete (≈1-3 min on CPU; the first run loads the search models).
 2. Read the summary, click evidence chips (E1, E2…), download the Markdown report, then **Submit for approval**.
-3. Sign out, sign in as `manager.investigations`, open the case, write a rationale and **Escalate / Approve / Request more info / Reject**. A decision that differs from the AI recommendation is recorded as an override.
-4. Sign in as `compliance.officer` → **Audit & governance**: decisions, override rate, agent success rates, audit trail.
+3. Sign out, sign in as `investigation_manager`, open the case, write a rationale and **Escalate / Approve / Request more info / Reject**. A decision that differs from the AI recommendation is recorded as an override.
+4. Sign in as `compliance_officer` → **Audit & governance**: decisions, override rate, agent success rates, audit trail.
 
 Same thing from the command line (no browser):
 

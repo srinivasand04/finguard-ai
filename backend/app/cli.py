@@ -11,7 +11,7 @@
     python -m app.cli alerts
     python -m app.cli rag-build    # Phase 2: compliance corpus -> chunks -> embeddings -> Qdrant
     python -m app.cli rag-eval     # Phase 2: retrieval + answer evaluation
-    python -m app.cli seed-users   # Phase 4: one demo user per role (password from DEMO_USER_PASSWORD)
+    python -m app.cli seed-users [--reset-passwords]   # Phase 4: one demo user per role (DEMO_USER_PASSWORD)
     python -m app.cli create-user --username U --role ROLE [--full-name N]   (password prompted)
     python -m app.cli investigate --customer CUST10025 [--username U]       # Phase 3: run the agents from CLI
     python -m app.cli agent-eval [--n 12] [--llm]                            # Phase 3: agent workflow evaluation
@@ -43,8 +43,11 @@ def main() -> None:
     d = sub.add_parser("init-db"); d.add_argument("--drop", action="store_true")
     g = sub.add_parser("generate"); g.add_argument("--customers", type=int, default=1500); g.add_argument("--days", type=int, default=180)
     i = sub.add_parser("ingest"); i.add_argument("--source", default=str(s.data_dir / "raw" / "amlsim"))
-    for name in ["eda", "train", "score", "graph", "risk", "alerts", "rag-build", "rag-eval", "seed-users", "all"]:
+    for name in ["eda", "train", "score", "graph", "risk", "alerts", "rag-build", "rag-eval", "all"]:
         sub.add_parser(name)
+    su = sub.add_parser("seed-users")
+    su.add_argument("--reset-passwords", action="store_true",
+                    help="also set DEMO_USER_PASSWORD on demo accounts that already exist")
     cu = sub.add_parser("create-user")
     cu.add_argument("--username", required=True)
     cu.add_argument("--role", required=True)
@@ -52,7 +55,7 @@ def main() -> None:
     iv = sub.add_parser("investigate")
     iv.add_argument("--customer", required=True)
     iv.add_argument("--request", default=None)
-    iv.add_argument("--username", default="analyst.fraud", help="analyst account the case is attributed to")
+    iv.add_argument("--username", default="fraud_analyst", help="analyst account the case is attributed to")
     ae = sub.add_parser("agent-eval")
     ae.add_argument("--n", type=int, default=12)
     ae.add_argument("--llm", action="store_true", help="use the LLM for narratives (slower)")
@@ -94,7 +97,7 @@ def main() -> None:
             _print("rag-eval", run_evaluation(engine), t0)
         elif step == "seed-users":
             from app.services.users import seed_demo_users
-            _print("seed-users", seed_demo_users(engine), t0)
+            _print("seed-users", seed_demo_users(engine, reset_passwords=getattr(a, "reset_passwords", False)), t0)
         elif step == "create-user":
             import getpass
 

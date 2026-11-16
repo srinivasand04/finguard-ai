@@ -183,7 +183,7 @@ npm install
 npm run dev                                   # http://localhost:5173  (proxies /api to :8000)
 ```
 
-- Dashboard: http://localhost:5173 - sign in with a demo account (e.g. `analyst.fraud`, `manager.investigations`; password = `DEMO_USER_PASSWORD` in `.env`)
+- Dashboard: http://localhost:5173 - sign in with a demo account (e.g. `fraud_analyst`, `investigation_manager`; password = `DEMO_USER_PASSWORD` in `.env`)
 - API docs (Swagger): http://localhost:8000/docs - click *Authorize* to log in
 
 Ports 5432/5433 are often used by a local Postgres install, so the container is published on **55432**. Change `POSTGRES_HOST_PORT` / `DATABASE_URL` in `.env` if needed.
