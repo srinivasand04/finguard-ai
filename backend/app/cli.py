@@ -11,7 +11,12 @@
     python -m app.cli alerts
     python -m app.cli rag-build    # Phase 2: compliance corpus -> chunks -> embeddings -> Qdrant
     python -m app.cli rag-eval     # Phase 2: retrieval + answer evaluation
-    python -m app.cli all          # init-db --drop, generate, ingest, eda, train, score, graph, risk, alerts, rag-build
+    python -m app.cli seed-users   # Phase 4: one demo user per role (password from DEMO_USER_PASSWORD)
+    python -m app.cli create-user --username U --role ROLE [--full-name N]   (password prompted)
+    python -m app.cli investigate --customer CUST10025 [--username U]       # Phase 3: run the agents from CLI
+    python -m app.cli agent-eval [--n 12] [--llm]                            # Phase 3: agent workflow evaluation
+    python -m app.cli all          # init-db --drop, generate, ingest, eda, train, score, graph, risk, alerts,
+                                   # rag-build, seed-users
 """
 from __future__ import annotations
 
@@ -38,11 +43,23 @@ def main() -> None:
     d = sub.add_parser("init-db"); d.add_argument("--drop", action="store_true")
     g = sub.add_parser("generate"); g.add_argument("--customers", type=int, default=1500); g.add_argument("--days", type=int, default=180)
     i = sub.add_parser("ingest"); i.add_argument("--source", default=str(s.data_dir / "raw" / "amlsim"))
-    for name in ["eda", "train", "score", "graph", "risk", "alerts", "rag-build", "rag-eval", "all"]:
+    for name in ["eda", "train", "score", "graph", "risk", "alerts", "rag-build", "rag-eval", "seed-users", "all"]:
         sub.add_parser(name)
+    cu = sub.add_parser("create-user")
+    cu.add_argument("--username", required=True)
+    cu.add_argument("--role", required=True)
+    cu.add_argument("--full-name", default=None)
+    iv = sub.add_parser("investigate")
+    iv.add_argument("--customer", required=True)
+    iv.add_argument("--request", default=None)
+    iv.add_argument("--username", default="analyst.fraud", help="analyst account the case is attributed to")
+    ae = sub.add_parser("agent-eval")
+    ae.add_argument("--n", type=int, default=12)
+    ae.add_argument("--llm", action="store_true", help="use the LLM for narratives (slower)")
     a = p.parse_args()
     engine = get_engine()
-    steps = ["init-db", "generate", "ingest", "eda", "train", "score", "graph", "risk", "alerts", "rag-build"] if a.cmd == "all" else [a.cmd]
+    steps = (["init-db", "generate", "ingest", "eda", "train", "score", "graph", "risk", "alerts", "rag-build",
+              "seed-users"] if a.cmd == "all" else [a.cmd])
     source = Path(getattr(a, "source", s.data_dir / "raw" / "amlsim"))
 
     for step in steps:
@@ -75,6 +92,35 @@ def main() -> None:
         elif step == "rag-eval":
             from rag.evaluation import run_evaluation
             _print("rag-eval", run_evaluation(engine), t0)
+        elif step == "seed-users":
+            from app.services.users import seed_demo_users
+            _print("seed-users", seed_demo_users(engine), t0)
+        elif step == "create-user":
+            import getpass
+
+            from app.services.users import create_user
+            pw = getpass.getpass(f"Password for {a.username}: ")
+            _print("create-user", create_user(engine, a.username, a.role, pw, a.full_name), t0)
+        elif step == "investigate":
+            from sqlalchemy.orm import Session
+
+            from agents.runner import run_investigation
+            from app.models import User
+            from app.security import Actor
+            from app.services import cases
+            with Session(engine) as session:
+                u = session.query(User).filter(User.username == a.username).one_or_none()
+                if u is None:
+                    raise SystemExit(f"User {a.username} not found - run `python -m app.cli seed-users` first")
+                actor = Actor(u.username, u.role)
+                inv = cases.create_case(session, actor, a.request or f"Investigate suspicious transactions involving customer {a.customer}", a.customer)
+                inv_id, ref = inv.id, inv.case_ref
+            print(f"Case {ref} (id {inv_id}) created - running agents...")
+            _print("investigate", run_investigation(inv_id, actor), t0)
+        elif step == "agent-eval":
+            from agents.evaluation import run_agent_evaluation
+            out = run_agent_evaluation(n=a.n, use_llm=a.llm)
+            _print("agent-eval", {k: v for k, v in out.items() if k != "cases"}, t0)
         elif step == "risk":
             from app.services.risk_scoring import run_customer_risk
             _print("risk", run_customer_risk(engine), t0)
