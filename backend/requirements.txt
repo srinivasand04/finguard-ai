@@ -33,3 +33,5 @@ PyJWT==2.10.1
 prometheus-client==0.21.1
 langfuse==2.57.0
 python-multipart==0.0.20
+# --- GNN experiment ---
+torch_geometric==2.6.1

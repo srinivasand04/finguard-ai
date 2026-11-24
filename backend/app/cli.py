@@ -15,6 +15,7 @@
     python -m app.cli create-user --username U --role ROLE [--full-name N]   (password prompted)
     python -m app.cli investigate --customer CUST10025 [--username U]       # Phase 3: run the agents from CLI
     python -m app.cli agent-eval [--n 12] [--llm]                            # Phase 3: agent workflow evaluation
+    python -m app.cli gnn-experiment [--epochs 200 --folds 5 --hidden 32]   # GNN embeddings vs baseline
     python -m app.cli all          # init-db --drop, generate, ingest, eda, train, score, graph, risk, alerts,
                                    # rag-build, seed-users
 """
@@ -56,6 +57,10 @@ def main() -> None:
     iv.add_argument("--customer", required=True)
     iv.add_argument("--request", default=None)
     iv.add_argument("--username", default="fraud_analyst", help="analyst account the case is attributed to")
+    ge = sub.add_parser("gnn-experiment")
+    ge.add_argument("--epochs", type=int, default=200)
+    ge.add_argument("--folds", type=int, default=5)
+    ge.add_argument("--hidden", type=int, default=32)
     ae = sub.add_parser("agent-eval")
     ae.add_argument("--n", type=int, default=12)
     ae.add_argument("--llm", action="store_true", help="use the LLM for narratives (slower)")
@@ -120,6 +125,9 @@ def main() -> None:
                 inv_id, ref = inv.id, inv.case_ref
             print(f"Case {ref} (id {inv_id}) created - running agents...")
             _print("investigate", run_investigation(inv_id, actor), t0)
+        elif step == "gnn-experiment":
+            from gnn.experiment import run_gnn_experiment
+            _print("gnn-experiment", run_gnn_experiment(engine, folds=a.folds, epochs=a.epochs, hidden=a.hidden), t0)
         elif step == "agent-eval":
             from agents.evaluation import run_agent_evaluation
             out = run_agent_evaluation(n=a.n, use_llm=a.llm)

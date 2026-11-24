@@ -20,7 +20,8 @@ def test_tables_populated_and_consistent(pipeline):
               "audit_logs", "graph_edges", "account_graph_metrics"]}
         assert n["fraud_predictions"] == n["transactions"] > 0
         assert n["customer_risk"] == n["customers"]
-        assert n["model_versions"] == 3 and n["alerts"] > 0 and n["audit_logs"] >= 5
+        assert n["model_versions"] >= 3 and n["alerts"] > 0   # 3 core models (+ optional experiments)
+        assert n["audit_logs"] >= 5
         assert n["account_graph_metrics"] == n["accounts"] and n["graph_edges"] > 0
         orphans = c.execute(text("SELECT COUNT(*) FROM transactions t LEFT JOIN accounts a "
                                  "ON a.account_id = t.sender_account_id WHERE a.account_id IS NULL")).scalar()
@@ -105,5 +106,5 @@ def test_alerts_and_models(client):
     assert a["total"] > 0 and all(x["reasons"] for x in a["items"])
     assert client.get(f"/api/v1/alerts/{a['items'][0]['id']}").status_code == 200
     ms = client.get("/api/v1/models").json()
-    assert {m["model_name"] for m in ms} == {"fraud_xgboost", "fraud_random_forest", "anomaly_isolation_forest"}
+    assert {"fraud_xgboost", "fraud_random_forest", "anomaly_isolation_forest"} <= {m["model_name"] for m in ms}
     assert client.get(f"/api/v1/models/{ms[0]['id']}").json()["metrics"]

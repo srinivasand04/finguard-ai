@@ -146,6 +146,18 @@ Full write-up: [docs/phase3_4_report.md](docs/phase3_4_report.md) · security mo
 | Dashboard | Network explorer (Cytoscape.js: ego networks, patterns, networks, shortest path) and Compliance assistant | `frontend/src/pages/Network.tsx`, `Compliance.tsx` |
 | CI | GitHub Actions: 58 backend tests + frontend build on every push | `.github/workflows/ci.yml` |
 
+## Experiment: graph neural networks (GNN)
+
+Does a GNN add signal on top of the 28 transaction features? A directed GraphSAGE (PyTorch Geometric) learns from the account network of the **training period only**, with **out-of-fold** predictions fed into XGBoost - the pattern of NVIDIA's fraud-detection blueprint - plus an **ablation** with the edges removed.
+
+| Model (test period, 41 laundering transactions) | PR-AUC, mean of 4 seeds |
+|---|---|
+| Baseline XGBoost (28 features) | 0.687 |
+| + GNN features | 0.782 |
+| + same network without edges (ablation) | **0.832** (significant: +0.06 to +0.23, 95% CI) |
+
+The graph clearly improves **account-level** ranking (0.77 vs 0.65), but for **transaction** scoring most of the gain comes from account-history features - so the GNN is best used for mule-account and network triage. Full method, caveats and bootstrap intervals: [docs/gnn_report.md](docs/gnn_report.md) · run it with `python -m app.cli gnn-experiment`.
+
 ## What Phases 3 and 4 add
 
 | Area | What is built | Where |

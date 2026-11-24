@@ -6,7 +6,9 @@ import { ErrorBox, Loading, Section } from '../components/ui'
 import { useFetch } from '../hooks'
 
 const KEY_METRICS = ['pr_auc', 'roc_auc', 'precision', 'recall', 'f1', 'threshold', 'pr_auc_vs_sar_labels', 'roc_auc_vs_sar_labels',
-  'precision_at_top_0.5%', 'recall_at_top_0.5%', 'precision_at_top_1.0%', 'recall_at_top_1.0%', 'base_rate']
+  'precision_at_top_0.5%', 'recall_at_top_0.5%', 'precision_at_top_1.0%', 'recall_at_top_1.0%', 'base_rate',
+  // GNN experiment comparison (fraud_xgboost_gnn)
+  'baseline_pr_auc', 'no_graph_ablation_pr_auc', 'pr_auc_delta_mean', 'probability_gnn_better', 'probability_graph_beats_ablation']
 
 export default function Models() {
   const { data, error } = useFetch(() => get<ModelVersion[]>('/api/v1/models'), [])
